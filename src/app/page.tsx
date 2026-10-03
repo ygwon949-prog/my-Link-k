@@ -1,11 +1,20 @@
+import Image from "next/image";
+
 export default function Home() {
   return (
     <main className="flex-1 flex items-center justify-center p-4 sm:p-8">
       {/* 프로필 카드 (Neobrutalism 스타일) */}
-      <section className="w-full p-[16px] md:w-[80%] md:p-[48px] min-[1023px]:w-[400px] min-[1023px]:p-[24px] mx-auto bg-[#FEF08A] border-[3px] border-black rounded-[12px] shadow-[6px_6px_0px_#000000] text-center text-black">
-        {/* 프로필 이미지 (120px x 120px, 원형, 3px 검은 테두리, 4px 4px 하드 그림자) */}
-        <div className="mx-auto mb-6 flex h-[120px] w-[120px] items-center justify-center rounded-full bg-white text-black text-4xl font-black border-[3px] border-black shadow-[4px_4px_0px_#000000]">
-          권
+      <section className="w-full p-[16px] md:w-[80%] md:max-w-[480px] md:p-[24px] min-[1023px]:w-[400px] min-[1023px]:p-[24px] mx-auto bg-[#FEF08A] border-[3px] border-black rounded-[12px] shadow-[6px_6px_0px_#000000] text-center text-black">
+        {/* 프로필 이미지 (반응형: 모바일 100px -> 태블릿/데스크탑 120px, 원형, 3px 검은 테두리, 4px 4px 하드 그림자) */}
+        <div className="relative mx-auto mb-5 sm:mb-6 h-[100px] w-[100px] sm:h-[110px] sm:w-[110px] md:h-[120px] md:w-[120px] rounded-full border-[3px] border-black shadow-[4px_4px_0px_#000000] overflow-hidden bg-white">
+          <Image
+            src="/avatar.png"
+            alt="권용대 프로필 사진"
+            fill
+            sizes="(max-width: 640px) 100px, (max-width: 768px) 110px, 120px"
+            priority
+            className="object-cover"
+          />
         </div>
 
         {/* 이름 */}
