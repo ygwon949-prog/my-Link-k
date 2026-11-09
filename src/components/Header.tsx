@@ -4,14 +4,32 @@ export default function Header() {
   return (
     <header className="w-full border-b-[3px] border-black bg-white dark:bg-zinc-950 sticky top-0 z-50">
       <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 font-black text-xl tracking-tight text-black dark:text-white"
-        >
-          <span className="bg-[#FEF08A] text-black px-2.5 py-1 rounded-[8px] border-[2px] border-black shadow-[2px_2px_0px_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_#000000] transition-all">
-            ⚡ mylink
-          </span>
-        </Link>
+        <div className="flex items-center gap-3 sm:gap-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 font-black text-xl tracking-tight text-black dark:text-white"
+          >
+            <span className="bg-[#FEF08A] text-black px-2.5 py-1 rounded-[8px] border-[2px] border-black shadow-[2px_2px_0px_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_#000000] transition-all">
+              ⚡ mylink
+            </span>
+          </Link>
+
+          <nav className="flex items-center gap-2">
+            <Link
+              href="/"
+              className="px-2.5 py-1 rounded-[6px] text-xs sm:text-sm font-black text-black hover:bg-zinc-100 transition-colors"
+            >
+              프로필
+            </Link>
+            <Link
+              href="/links"
+              className="px-2.5 py-1 rounded-[6px] text-xs sm:text-sm font-black bg-[#BAE6FD] text-black border-[1.5px] border-black shadow-[1.5px_1.5px_0px_#000000] hover:translate-x-[0.5px] hover:translate-y-[0.5px] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all"
+            >
+              전체 링크
+            </Link>
+          </nav>
+        </div>
+
         <nav className="flex items-center gap-3">
           <a
             href="https://github.com/ygwon949-prog"
@@ -31,7 +49,7 @@ export default function Header() {
                 clipRule="evenodd"
               />
             </svg>
-            <span>GitHub</span>
+            <span className="hidden sm:inline">GitHub</span>
           </a>
         </nav>
       </div>
