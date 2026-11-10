@@ -45,7 +45,7 @@ export function LinkList({ links, showFilter = true }: LinkListProps) {
     <div className="w-full flex flex-col gap-3">
       {/* 카테고리 필터 & 검색 영역 (링크가 3개 이상일 때 편리하게 노출) */}
       {showFilter && links.length > 2 && (
-        <div className="flex flex-col gap-2.5 pb-1">
+        <div className="flex flex-col gap-2 pb-1">
           {/* shadcn/ui Input 재사용: 간편 검색 인풋 */}
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/60 pointer-events-none" />
@@ -58,9 +58,9 @@ export function LinkList({ links, showFilter = true }: LinkListProps) {
             />
           </div>
 
-          {/* 카테고리 버튼 필터 (shadcn/ui Button 재사용) */}
+          {/* 카테고리 버튼 필터 (flex-wrap 기반의 안정된 칩 레이아웃으로 잘림 현상 방지) */}
           {availableCategories.length > 2 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none no-scrollbar">
+            <div className="flex items-center justify-center flex-wrap gap-1.5 p-1">
               {availableCategories.map((cat) => {
                 const isSelected = selectedCategory === cat;
                 return (
@@ -69,9 +69,9 @@ export function LinkList({ links, showFilter = true }: LinkListProps) {
                     size="sm"
                     variant={isSelected ? "secondary" : "outline"}
                     onClick={() => setSelectedCategory(cat)}
-                    className={`h-7 px-2.5 py-0.5 text-xs font-black shrink-0 ${
+                    className={`h-7 px-2.5 py-0.5 text-[11px] sm:text-xs font-black transition-all ${
                       isSelected
-                        ? "bg-[#67E8F9] text-black shadow-[2px_2px_0px_#000000]"
+                        ? "bg-[#67E8F9] text-black shadow-[2px_2px_0px_#000000] -translate-y-0.5"
                         : "bg-white text-black/80 hover:bg-zinc-100 shadow-[1.5px_1.5px_0px_#000000]"
                     }`}
                   >

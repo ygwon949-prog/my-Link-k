@@ -46,13 +46,13 @@ export default function LinksPage() {
   }, [rawLinks, selectedCategory, searchQuery]);
 
   return (
-    <main className="relative flex-1 p-4 sm:p-8 bg-[#FFFBEB] dark:bg-zinc-950 min-h-[calc(100vh-64px)]">
+    <main className="relative flex-1 p-4 sm:p-6 md:p-8 bg-[#FFFBEB] dark:bg-zinc-950 min-h-[calc(100vh-64px)]">
       {/* 배경 도트 패턴 (Tailwind CSS) */}
       <div className="absolute inset-0 bg-[radial-gradient(#000000_1.5px,transparent_1.5px)] dark:bg-[radial-gradient(#ffffff_1.5px,transparent_1.5px)] [background-size:24px_24px] opacity-10 pointer-events-none" />
 
-      <div className="relative max-w-2xl mx-auto flex flex-col gap-6">
+      <div className="relative max-w-2xl mx-auto flex flex-col gap-5 sm:gap-6">
         {/* 상단 내비게이션 바 (shadcn/ui Button 재사용) */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <Link href="/">
             <Button
               variant="outline"
@@ -68,7 +68,7 @@ export default function LinksPage() {
             variant="default"
             size="sm"
             onClick={() => setUseAllSampleLinks((prev) => !prev)}
-            className="text-xs font-black"
+            className="text-xs font-black shrink-0"
           >
             {useAllSampleLinks ? "내 등록 링크 보기" : "전체 샘플(10개) 보기"}
           </Button>
@@ -120,7 +120,7 @@ export default function LinksPage() {
               />
             </div>
 
-            {/* 카테고리 버튼 필터 (shadcn/ui Button 재사용) */}
+            {/* 카테고리 버튼 필터 (안정적인 flex-wrap 및 패딩 적용) */}
             <div className="flex items-center gap-1.5 flex-wrap pt-1">
               <div className="flex items-center gap-1 text-xs font-black text-black/70 mr-1 select-none">
                 <Filter className="w-3.5 h-3.5" />
@@ -134,9 +134,9 @@ export default function LinksPage() {
                     size="sm"
                     variant={isSelected ? "default" : "outline"}
                     onClick={() => setSelectedCategory(cat)}
-                    className={`h-7 px-2.5 py-0.5 text-xs font-black ${
+                    className={`h-7 px-2.5 py-0.5 text-xs font-black transition-all ${
                       isSelected
-                        ? "shadow-[2px_2px_0px_#000000]"
+                        ? "shadow-[2px_2px_0px_#000000] -translate-y-0.5"
                         : "shadow-[1.5px_1.5px_0px_#000000]"
                     }`}
                   >

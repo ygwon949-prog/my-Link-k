@@ -43,7 +43,7 @@ export function ProfileCard() {
   return (
     <Card
       variant="default"
-      className="relative w-full p-4 md:w-[85%] md:max-w-[480px] md:p-6 min-[1023px]:w-[420px] min-[1023px]:p-6 mx-auto text-center"
+      className="relative w-full max-w-[440px] sm:max-w-[460px] md:max-w-[480px] p-4 sm:p-5 md:p-6 mx-auto text-center transition-all duration-200"
     >
       {/* 상단 모서리 스티커 배지 (shadcn/ui Badge 재사용) */}
       <div className="absolute -top-3.5 -right-2 sm:-right-3 z-10">
