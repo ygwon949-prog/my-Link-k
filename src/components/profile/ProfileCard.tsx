@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { LinkItem } from "@/types";
 import { useProfileStore } from "@/store";
 import { useMounted } from "@/hooks/useMounted";
 import { DEFAULT_PROFILE_DATA, DUMMY_LINKS, INITIAL_LINKS } from "@/data";
@@ -17,25 +18,37 @@ import {
 } from "@/components/ui";
 import { LinkList } from "./LinkList";
 import { SocialBar } from "./SocialBar";
+import { AddLinkDialog } from "./AddLinkDialog";
 import { Sparkles, Layers } from "lucide-react";
 
 export function ProfileCard() {
   const isMounted = useMounted();
   const profileState = useProfileStore((state) => state.profile);
-  const setLinks = useProfileStore((state) => state.setLinks);
+  const setStoreLinks = useProfileStore((state) => state.setLinks);
+  const addStoreLink = useProfileStore((state) => state.addLink);
 
   // SSR hydration mismatch 방지: 마운트 전에는 DEFAULT_PROFILE_DATA 사용
   const profile = isMounted ? profileState : DEFAULT_PROFILE_DATA;
 
+  // 로컬 상태로 링크 목록 관리 (초기값: INITIAL_LINKS)
+  const [links, setLinks] = useState<LinkItem[]>(INITIAL_LINKS);
   const [isSampleMode, setIsSampleMode] = useState(false);
+
+  // 다이얼로그에서 새 링크 추가 시 로컬 상태 즉시 업데이트 (& 스토어 동기화)
+  const handleAddLink = (newLink: LinkItem) => {
+    setLinks((prev) => [newLink, ...prev]);
+    addStoreLink(newLink);
+  };
 
   // 샘플 데이터 전환 (INITIAL 4개 <-> DUMMY 10개 전체 목록)
   const handleToggleSampleData = () => {
     if (isSampleMode) {
       setLinks(INITIAL_LINKS);
+      setStoreLinks(INITIAL_LINKS);
       setIsSampleMode(false);
     } else {
       setLinks(DUMMY_LINKS);
+      setStoreLinks(DUMMY_LINKS);
       setIsSampleMode(true);
     }
   };
@@ -104,23 +117,26 @@ export function ProfileCard() {
       </CardHeader>
 
       <CardContent className="p-0 pt-2 flex flex-col gap-5">
-        {/* 링크 목록 헤더 */}
+        {/* 링크 목록 헤더 + 새 링크 추가 다이얼로그 버튼 */}
         <div className="flex items-center justify-between gap-2 pt-2 border-t-[2px] border-black/15">
           <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm text-black">
             <Sparkles className="w-4 h-4 text-amber-500" />
             <span>링크 목록</span>
+            <Badge variant="default" size="sm" className="font-black bg-white">
+              {links.length}개
+            </Badge>
           </div>
-          <Badge variant="default" size="sm" className="font-black bg-white">
-            {profile.links.length}개
-          </Badge>
+
+          <AddLinkDialog
+            onAddLink={handleAddLink}
+            triggerLabel="새 링크 추가"
+            triggerClassName="h-8 px-2.5 text-xs font-black"
+          />
         </div>
 
         {/* 인터랙티브 링크 목록 컴포넌트 */}
         <div className="-mt-2">
-          <LinkList
-            links={profile.links}
-            showFilter={profile.links.length > 3}
-          />
+          <LinkList links={links} showFilter={links.length > 3} />
         </div>
 
         {/* 소셜 채널 아이콘 바 & Separator (shadcn/ui Separator 재사용) */}

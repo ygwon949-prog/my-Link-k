@@ -2,10 +2,11 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
+import { LinkItem } from "@/types";
 import { useProfileStore } from "@/store";
-import { useMounted } from "@/hooks/useMounted";
 import { DUMMY_LINKS, LINK_CATEGORIES } from "@/data";
 import { LinkButton } from "@/components/profile/LinkButton";
+import { AddLinkDialog } from "@/components/profile/AddLinkDialog";
 import {
   Card,
   CardHeader,
@@ -19,21 +20,21 @@ import {
 import { Search, ArrowLeft, Filter, Sparkles } from "lucide-react";
 
 export default function LinksPage() {
-  const isMounted = useMounted();
-  const profileLinks = useProfileStore((state) => state.profile.links);
+  const addStoreLink = useProfileStore((state) => state.addLink);
 
-  const [useAllSampleLinks, setUseAllSampleLinks] = useState(true);
+  // 로컬 상태로 링크 목록 관리 (초기값: DUMMY_LINKS)
+  const [links, setLinks] = useState<LinkItem[]>(DUMMY_LINKS);
   const [selectedCategory, setSelectedCategory] = useState<string>("전체");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  const rawLinks = useMemo(() => {
-    if (!isMounted) return DUMMY_LINKS;
-    return useAllSampleLinks ? DUMMY_LINKS : profileLinks;
-  }, [isMounted, useAllSampleLinks, profileLinks]);
+  const handleAddLink = (newLink: LinkItem) => {
+    setLinks((prev) => [newLink, ...prev]);
+    addStoreLink(newLink);
+  };
 
   // 필터링 적용
   const filteredLinks = useMemo(() => {
-    return rawLinks.filter((link) => {
+    return links.filter((link) => {
       const matchCat =
         selectedCategory === "전체" || link.category === selectedCategory;
       const matchQuery =
@@ -43,7 +44,7 @@ export default function LinksPage() {
           link.description.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchCat && matchQuery;
     });
-  }, [rawLinks, selectedCategory, searchQuery]);
+  }, [links, selectedCategory, searchQuery]);
 
   return (
     <main className="relative flex-1 p-4 sm:p-6 md:p-8 bg-[#FFFBEB] dark:bg-zinc-950 min-h-[calc(100vh-64px)]">
@@ -51,7 +52,7 @@ export default function LinksPage() {
       <div className="absolute inset-0 bg-[radial-gradient(#000000_1.5px,transparent_1.5px)] dark:bg-[radial-gradient(#ffffff_1.5px,transparent_1.5px)] [background-size:24px_24px] opacity-10 pointer-events-none" />
 
       <div className="relative max-w-2xl mx-auto flex flex-col gap-5 sm:gap-6">
-        {/* 상단 내비게이션 바 (shadcn/ui Button 재사용) */}
+        {/* 상단 내비게이션 바 (shadcn/ui Button 및 AddLinkDialog 재사용) */}
         <div className="flex items-center justify-between gap-2">
           <Link href="/">
             <Button
@@ -64,14 +65,11 @@ export default function LinksPage() {
             </Button>
           </Link>
 
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => setUseAllSampleLinks((prev) => !prev)}
-            className="text-xs font-black shrink-0"
-          >
-            {useAllSampleLinks ? "내 등록 링크 보기" : "전체 샘플(10개) 보기"}
-          </Button>
+          <AddLinkDialog
+            onAddLink={handleAddLink}
+            triggerLabel="새 링크 추가"
+            triggerClassName="text-xs font-black shrink-0"
+          />
         </div>
 
         {/* 페이지 헤더 카드 (shadcn/ui Card, CardHeader, CardTitle, CardDescription 재사용) */}
@@ -98,7 +96,7 @@ export default function LinksPage() {
               <div className="hidden sm:flex flex-col items-center justify-center p-3 bg-white rounded-[10px] border-[2px] border-black shadow-[3px_3px_0px_#000000]">
                 <span className="text-xs font-black text-black/60">전체</span>
                 <span className="text-2xl font-black text-black">
-                  {rawLinks.length}
+                  {links.length}
                 </span>
               </div>
             </div>
