@@ -1,8 +1,19 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { useForm, useWatch } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { LinkItem } from "@/types";
 import { LINK_CATEGORIES } from "@/data";
+import {
+  createAddLinkSchema,
+  createLinkItemFromForm,
+  AddLinkFormValues,
+  normalizeUrl,
+  TITLE_MIN_LENGTH,
+  TITLE_MAX_LENGTH,
+  DESCRIPTION_MAX_LENGTH,
+} from "@/schemas";
 import {
   Dialog,
   DialogTrigger,
@@ -11,13 +22,16 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  Field,
+  FieldLabel,
+  FieldError,
   Button,
   Input,
   Label,
   Badge,
 } from "@/components/ui";
 import { LinkButton } from "./LinkButton";
-import { Plus, Sparkles, Pin, AlertCircle } from "lucide-react";
+import { Plus, Sparkles, Pin, AlertCircle, CheckCircle2 } from "lucide-react";
 
 const PRESET_ICONS = [
   "🔗",
@@ -34,98 +48,99 @@ const PRESET_ICONS = [
 
 const SELECTABLE_CATEGORIES = LINK_CATEGORIES.filter((cat) => cat !== "전체");
 
+const DEFAULT_VALUES: AddLinkFormValues = {
+  icon: "🔗",
+  title: "",
+  url: "",
+  description: "",
+  category: "개발",
+  isPinned: false,
+};
+
 export interface AddLinkDialogProps {
   onAddLink: (newLink: LinkItem) => void;
+  existingLinks?: LinkItem[];
   triggerLabel?: string;
   triggerClassName?: string;
 }
 
 export function AddLinkDialog({
   onAddLink,
+  existingLinks = [],
   triggerLabel = "새 링크 추가",
   triggerClassName,
 }: AddLinkDialogProps) {
   const [open, setOpen] = useState(false);
 
-  // 폼 로컬 상태 (React useState)
-  const [title, setTitle] = useState("");
-  const [url, setUrl] = useState("");
-  const [icon, setIcon] = useState("🔗");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<string>("개발");
-  const [isPinned, setIsPinned] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // 기존 링크 목록을 반영한 동적 Zod 스키마 메모이제이션
+  const schema = useMemo(
+    () => createAddLinkSchema(existingLinks),
+    [existingLinks]
+  );
 
-  const resetForm = () => {
-    setTitle("");
-    setUrl("");
-    setIcon("🔗");
-    setDescription("");
-    setCategory("개발");
-    setIsPinned(false);
-    setError(null);
-  };
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    reset,
+    control,
+    formState: { errors, touchedFields, dirtyFields },
+  } = useForm<AddLinkFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: DEFAULT_VALUES,
+    mode: "onTouched",
+  });
+
+  // React Hook Form의 useWatch를 활용한 실시간 미리보기 및 글자 수 구독
+  const watchedValues = useWatch({
+    control,
+    defaultValue: DEFAULT_VALUES,
+  });
+
+  const currentIcon = watchedValues.icon ?? "🔗";
+  const currentTitle = watchedValues.title ?? "";
+  const currentUrl = watchedValues.url ?? "";
+  const currentDescription = watchedValues.description ?? "";
+  const currentCategory = watchedValues.category ?? "개발";
+  const currentIsPinned = Boolean(watchedValues.isPinned);
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
-      resetForm();
+      reset(DEFAULT_VALUES);
     }
   };
 
-  const normalizeUrl = (rawUrl: string): string => {
-    const trimmed = rawUrl.trim();
-    if (!trimmed) return "";
-    if (
-      trimmed.startsWith("http://") ||
-      trimmed.startsWith("https://") ||
-      trimmed.startsWith("mailto:")
-    ) {
-      return trimmed;
-    }
-    return `https://${trimmed}`;
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const trimmedTitle = title.trim();
-    const normalizedUrl = normalizeUrl(url);
-
-    if (!trimmedTitle) {
-      setError("링크 제목을 입력해주세요.");
-      return;
-    }
-
-    if (!normalizedUrl) {
-      setError("이동할 URL 주소를 입력해주세요.");
-      return;
-    }
-
-    const newLink: LinkItem = {
-      id: `link-${Date.now()}`,
-      title: trimmedTitle,
-      url: normalizedUrl,
-      icon: icon.trim() || "🔗",
-      description: description.trim() || undefined,
-      category,
-      isPinned,
-      createdAt: new Date().toISOString(),
-    };
-
+  const onValidSubmit = (data: AddLinkFormValues) => {
+    const newLink = createLinkItemFromForm(data);
     onAddLink(newLink);
-    resetForm();
+    reset(DEFAULT_VALUES);
     setOpen(false);
   };
 
+  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    void handleSubmit(onValidSubmit)(e);
+  };
+
+  const isTitleValid =
+    (touchedFields.title || dirtyFields.title) &&
+    !errors.title &&
+    currentTitle.trim().length >= TITLE_MIN_LENGTH;
+
+  const isUrlValid =
+    (touchedFields.url || dirtyFields.url) &&
+    !errors.url &&
+    currentUrl.trim().length > 0;
+
   const previewLink: LinkItem = {
     id: "preview",
-    title: title.trim() || "새로운 링크 제목 미리보기",
-    url: normalizeUrl(url) || "https://example.com",
-    icon: icon.trim() || "🔗",
-    description: description.trim() || "입력한 한줄 설명이 여기에 표시됩니다.",
-    category,
-    isPinned,
+    title: currentTitle.trim() || "새로운 링크 제목 미리보기",
+    url: normalizeUrl(currentUrl) || "https://example.com",
+    icon: currentIcon.trim() || "🔗",
+    description:
+      currentDescription.trim() || "입력한 한줄 설명이 여기에 표시됩니다.",
+    category: currentCategory,
+    isPinned: currentIsPinned,
   };
 
   return (
@@ -162,35 +177,43 @@ export function AddLinkDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-1">
-          {error && (
-            <div className="flex items-center gap-2 p-3 rounded-[8px] border-[2px] border-black bg-[#F87171]/30 text-black text-xs sm:text-sm font-black shadow-[2px_2px_0px_#000000]">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* 1. 아이콘(이모지) 선택 */}
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="link-icon">아이콘 (이모지)</Label>
+        <form
+          onSubmit={handleFormSubmit}
+          noValidate
+          className="flex flex-col gap-4 mt-1"
+        >
+          {/* 1. 아이콘(이모지) 선택 (@base-ui/react Field + Input) */}
+          <Field
+            name="icon"
+            invalid={Boolean(errors.icon)}
+            touched={Boolean(touchedFields.icon)}
+            dirty={Boolean(dirtyFields.icon)}
+          >
+            <FieldLabel>
+              아이콘 (이모지) <span className="text-red-600">*</span>
+            </FieldLabel>
             <div className="flex items-center gap-2">
               <Input
-                id="link-icon"
                 type="text"
-                value={icon}
-                onChange={(e) => setIcon(e.target.value)}
                 maxLength={4}
-                className="w-14 h-10 text-center text-lg px-1 shrink-0 bg-white"
                 aria-label="커스텀 이모지 입력"
+                className="w-14 h-10 text-center text-lg px-1 shrink-0 bg-white"
+                {...register("icon")}
               />
               <div className="flex items-center gap-1.5 flex-wrap">
                 {PRESET_ICONS.map((emoji) => {
-                  const isSelected = icon === emoji;
+                  const isSelected = currentIcon === emoji;
                   return (
                     <button
                       key={emoji}
                       type="button"
-                      onClick={() => setIcon(emoji)}
+                      onClick={() =>
+                        setValue("icon", emoji, {
+                          shouldValidate: true,
+                          shouldDirty: true,
+                          shouldTouch: true,
+                        })
+                      }
                       className={`w-8 h-8 rounded-[8px] border-[2px] border-black flex items-center justify-center text-base transition-all cursor-pointer ${
                         isSelected
                           ? "bg-[#FEF08A] shadow-[2px_2px_0px_#000000] -translate-y-0.5"
@@ -204,57 +227,126 @@ export function AddLinkDialog({
                 })}
               </div>
             </div>
-          </div>
+            {errors.icon && (
+              <FieldError>
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{errors.icon.message}</span>
+              </FieldError>
+            )}
+          </Field>
 
-          {/* 2. 링크 제목 */}
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="link-title">
-              링크 제목 <span className="text-red-600">*</span>
-            </Label>
-            <Input
-              id="link-title"
-              type="text"
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                if (error) setError(null);
-              }}
-              placeholder="예: 개인 포트폴리오 웹사이트"
-              required
-            />
-          </div>
+          {/* 2. 링크 제목 (@base-ui/react Field + Input) */}
+          <Field
+            name="title"
+            invalid={Boolean(errors.title)}
+            touched={Boolean(touchedFields.title)}
+            dirty={Boolean(dirtyFields.title)}
+          >
+            <div className="flex items-center justify-between">
+              <FieldLabel>
+                링크 제목 <span className="text-red-600">*</span>
+              </FieldLabel>
+              <span
+                className={`text-[11px] font-black ${
+                  currentTitle.trim().length > TITLE_MAX_LENGTH
+                    ? "text-red-600"
+                    : "text-black/50"
+                }`}
+              >
+                {currentTitle.trim().length}/{TITLE_MAX_LENGTH}자
+              </span>
+            </div>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="예: 개인 포트폴리오 웹사이트 (2~50자)"
+                className={`pr-9 ${
+                  isTitleValid ? "border-black bg-emerald-50/40" : ""
+                }`}
+                {...register("title")}
+              />
+              {isTitleValid && (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              )}
+            </div>
+            {errors.title && (
+              <FieldError>
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{errors.title.message}</span>
+              </FieldError>
+            )}
+          </Field>
 
-          {/* 3. 이동할 URL */}
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="link-url">
-              URL 주소 <span className="text-red-600">*</span>
-            </Label>
-            <Input
-              id="link-url"
-              type="text"
-              value={url}
-              onChange={(e) => {
-                setUrl(e.target.value);
-                if (error) setError(null);
-              }}
-              placeholder="https://github.com/..."
-              required
-            />
-          </div>
+          {/* 3. 이동할 URL (@base-ui/react Field + Input) */}
+          <Field
+            name="url"
+            invalid={Boolean(errors.url)}
+            touched={Boolean(touchedFields.url)}
+            dirty={Boolean(dirtyFields.url)}
+          >
+            <div className="flex items-center justify-between">
+              <FieldLabel>
+                URL 주소 <span className="text-red-600">*</span>
+              </FieldLabel>
+              <span className="text-[11px] font-bold text-black/50">
+                프로토콜 미입력 시 https:// 자동 적용
+              </span>
+            </div>
+            <div className="relative">
+              <Input
+                type="url"
+                placeholder="https://github.com/..."
+                className={`pr-9 ${
+                  isUrlValid ? "border-black bg-emerald-50/40" : ""
+                }`}
+                {...register("url")}
+              />
+              {isUrlValid && (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              )}
+            </div>
+            {errors.url && (
+              <FieldError>
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{errors.url.message}</span>
+              </FieldError>
+            )}
+          </Field>
 
-          {/* 4. 한줄 설명 (선택) */}
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="link-description">
-              한줄 설명 <span className="text-black/50 font-bold">(선택)</span>
-            </Label>
+          {/* 4. 한줄 설명 (@base-ui/react Field + Input) */}
+          <Field
+            name="description"
+            invalid={Boolean(errors.description)}
+            touched={Boolean(touchedFields.description)}
+            dirty={Boolean(dirtyFields.description)}
+          >
+            <div className="flex items-center justify-between">
+              <FieldLabel>
+                한줄 설명{" "}
+                <span className="text-black/50 font-bold">(선택)</span>
+              </FieldLabel>
+              <span
+                className={`text-[11px] font-black ${
+                  currentDescription.trim().length > DESCRIPTION_MAX_LENGTH
+                    ? "text-red-600"
+                    : "text-black/50"
+                }`}
+              >
+                {currentDescription.trim().length}/{DESCRIPTION_MAX_LENGTH}자
+              </span>
+            </div>
             <Input
-              id="link-description"
               type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="링크에 대한 간단한 설명을 적어주세요"
+              placeholder="링크에 대한 간단한 설명을 적어주세요 (최대 80자)"
+              {...register("description")}
             />
-          </div>
+            {errors.description && (
+              <FieldError>
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{errors.description.message}</span>
+              </FieldError>
+            )}
+          </Field>
 
           {/* 5. 카테고리 & 상단 고정 */}
           <div className="flex flex-col gap-2">
@@ -262,28 +354,40 @@ export function AddLinkDialog({
               <Label>카테고리</Label>
               <button
                 type="button"
-                onClick={() => setIsPinned((prev) => !prev)}
+                onClick={() =>
+                  setValue("isPinned", !currentIsPinned, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
                 className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] border-[2px] border-black text-xs font-black transition-all cursor-pointer ${
-                  isPinned
+                  currentIsPinned
                     ? "bg-[#FEF08A] text-black shadow-[2px_2px_0px_#000000]"
                     : "bg-white text-black/70 shadow-[1.5px_1.5px_0px_#000000] hover:bg-zinc-100"
                 }`}
               >
                 <Pin className="w-3.5 h-3.5" />
-                <span>{isPinned ? "상단 PIN 고정됨" : "상단 PIN 고정"}</span>
+                <span>
+                  {currentIsPinned ? "상단 PIN 고정됨" : "상단 PIN 고정"}
+                </span>
               </button>
             </div>
 
             <div className="flex items-center gap-1.5 flex-wrap">
               {SELECTABLE_CATEGORIES.map((cat) => {
-                const isSelected = category === cat;
+                const isSelected = currentCategory === cat;
                 return (
                   <Button
                     key={cat}
                     type="button"
                     size="sm"
                     variant={isSelected ? "secondary" : "outline"}
-                    onClick={() => setCategory(cat)}
+                    onClick={() =>
+                      setValue("category", cat, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
                     className={`h-7 px-2.5 py-0.5 text-xs font-black ${
                       isSelected
                         ? "bg-[#BAE6FD] shadow-[2px_2px_0px_#000000] -translate-y-0.5"

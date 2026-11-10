@@ -67,6 +67,7 @@ export default function LinksPage() {
 
           <AddLinkDialog
             onAddLink={handleAddLink}
+            existingLinks={links}
             triggerLabel="새 링크 추가"
             triggerClassName="text-xs font-black shrink-0"
           />

@@ -129,6 +129,7 @@ export function ProfileCard() {
 
           <AddLinkDialog
             onAddLink={handleAddLink}
+            existingLinks={links}
             triggerLabel="새 링크 추가"
             triggerClassName="h-8 px-2.5 text-xs font-black"
           />
