@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { LinkItem } from "@/types";
 import { useProfileStore } from "@/store";
 import { useMounted } from "@/hooks/useMounted";
 import { DEFAULT_PROFILE_DATA, DUMMY_LINKS, INITIAL_LINKS } from "@/data";
+import {
+  subscribeToAnonymousLinks,
+  mergeFirestoreLinks,
+} from "@/lib/links";
 import {
   Card,
   CardHeader,
@@ -30,25 +34,37 @@ export function ProfileCard() {
   // SSR hydration mismatch 방지: 마운트 전에는 DEFAULT_PROFILE_DATA 사용
   const profile = isMounted ? profileState : DEFAULT_PROFILE_DATA;
 
-  // 로컬 상태로 링크 목록 관리 (초기값: INITIAL_LINKS)
-  const [links, setLinks] = useState<LinkItem[]>(INITIAL_LINKS);
+  // Firestore(users/anonymous/links)에서 불러온 링크 상태 및 샘플 모드 상태 관리
+  const [firestoreLinks, setFirestoreLinks] = useState<LinkItem[]>([]);
   const [isSampleMode, setIsSampleMode] = useState(false);
 
-  // 다이얼로그에서 새 링크 추가 시 로컬 상태 즉시 업데이트 (& 스토어 동기화)
+  // Firestore(users/anonymous/links) 실시간 구독 연동
+  useEffect(() => {
+    const unsubscribe = subscribeToAnonymousLinks((fetchedLinks) => {
+      setFirestoreLinks(fetchedLinks);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Firestore 저장 링크와 기본/샘플 링크를 중복 없이 병합
+  const links = useMemo(() => {
+    const baseLinks = isSampleMode ? DUMMY_LINKS : INITIAL_LINKS;
+    return mergeFirestoreLinks(firestoreLinks, baseLinks);
+  }, [firestoreLinks, isSampleMode]);
+
+  // 다이얼로그에서 Firestore 저장 후 새 링크 전달 시 즉시 상태 업데이트 (& 스토어 동기화)
   const handleAddLink = (newLink: LinkItem) => {
-    setLinks((prev) => [newLink, ...prev]);
+    setFirestoreLinks((prev) => mergeFirestoreLinks([newLink], prev));
     addStoreLink(newLink);
   };
 
   // 샘플 데이터 전환 (INITIAL 4개 <-> DUMMY 10개 전체 목록)
   const handleToggleSampleData = () => {
     if (isSampleMode) {
-      setLinks(INITIAL_LINKS);
-      setStoreLinks(INITIAL_LINKS);
+      setStoreLinks(mergeFirestoreLinks(firestoreLinks, INITIAL_LINKS));
       setIsSampleMode(false);
     } else {
-      setLinks(DUMMY_LINKS);
-      setStoreLinks(DUMMY_LINKS);
+      setStoreLinks(mergeFirestoreLinks(firestoreLinks, DUMMY_LINKS));
       setIsSampleMode(true);
     }
   };

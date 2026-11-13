@@ -31,7 +31,15 @@ import {
   Badge,
 } from "@/components/ui";
 import { LinkButton } from "./LinkButton";
-import { Plus, Sparkles, Pin, AlertCircle, CheckCircle2 } from "lucide-react";
+import { addLinkToFirestore } from "@/lib/links";
+import {
+  Plus,
+  Sparkles,
+  Pin,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
 
 const PRESET_ICONS = [
   "🔗",
@@ -58,7 +66,7 @@ const DEFAULT_VALUES: AddLinkFormValues = {
 };
 
 export interface AddLinkDialogProps {
-  onAddLink: (newLink: LinkItem) => void;
+  onAddLink?: (newLink: LinkItem) => void;
   existingLinks?: LinkItem[];
   triggerLabel?: string;
   triggerClassName?: string;
@@ -71,6 +79,7 @@ export function AddLinkDialog({
   triggerClassName,
 }: AddLinkDialogProps) {
   const [open, setOpen] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // 기존 링크 목록을 반영한 동적 Zod 스키마 메모이제이션
   const schema = useMemo(
@@ -84,7 +93,7 @@ export function AddLinkDialog({
     setValue,
     reset,
     control,
-    formState: { errors, touchedFields, dirtyFields },
+    formState: { errors, touchedFields, dirtyFields, isSubmitting },
   } = useForm<AddLinkFormValues>({
     resolver: zodResolver(schema),
     defaultValues: DEFAULT_VALUES,
@@ -105,17 +114,30 @@ export function AddLinkDialog({
   const currentIsPinned = Boolean(watchedValues.isPinned);
 
   const handleOpenChange = (nextOpen: boolean) => {
+    if (isSubmitting) return;
     setOpen(nextOpen);
+    setSubmitError(null);
     if (!nextOpen) {
       reset(DEFAULT_VALUES);
     }
   };
 
-  const onValidSubmit = (data: AddLinkFormValues) => {
-    const newLink = createLinkItemFromForm(data);
-    onAddLink(newLink);
-    reset(DEFAULT_VALUES);
-    setOpen(false);
+  const onValidSubmit = async (data: AddLinkFormValues) => {
+    setSubmitError(null);
+    try {
+      const draftLink = createLinkItemFromForm(data);
+      const savedLink = await addLinkToFirestore(draftLink);
+      onAddLink?.(savedLink);
+      reset(DEFAULT_VALUES);
+      setOpen(false);
+    } catch (error) {
+      console.error("Firestore 링크 저장 실패 (users/anonymous/links):", error);
+      setSubmitError(
+        error instanceof Error
+          ? `링크 저장 중 오류가 발생했습니다: ${error.message}`
+          : "Firestore에 링크를 저장하는 중 오류가 발생했습니다. 다시 시도해주세요."
+      );
+    }
   };
 
   const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -411,17 +433,37 @@ export function AddLinkDialog({
             </div>
           </div>
 
+          {submitError && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 p-3 rounded-[8px] border-[2px] border-black bg-[#FEE2E2] text-red-900 text-xs font-bold shadow-[2px_2px_0px_#000000]"
+            >
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <span>{submitError}</span>
+            </div>
+          )}
+
           <DialogFooter className="pt-2">
             <Button
               type="button"
               variant="outline"
+              disabled={isSubmitting}
               onClick={() => handleOpenChange(false)}
             >
               취소
             </Button>
-            <Button type="submit" variant="default">
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>링크 추가하기</span>
+            <Button type="submit" variant="default" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>저장 중...</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>링크 추가하기</span>
+                </>
+              )}
             </Button>
           </DialogFooter>
         </form>

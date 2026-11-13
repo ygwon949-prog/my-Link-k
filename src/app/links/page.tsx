@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { LinkItem } from "@/types";
 import { useProfileStore } from "@/store";
 import { DUMMY_LINKS, LINK_CATEGORIES } from "@/data";
+import {
+  subscribeToAnonymousLinks,
+  mergeFirestoreLinks,
+} from "@/lib/links";
 import { LinkButton } from "@/components/profile/LinkButton";
 import { AddLinkDialog } from "@/components/profile/AddLinkDialog";
 import {
@@ -22,13 +26,26 @@ import { Search, ArrowLeft, Filter, Sparkles } from "lucide-react";
 export default function LinksPage() {
   const addStoreLink = useProfileStore((state) => state.addLink);
 
-  // 로컬 상태로 링크 목록 관리 (초기값: DUMMY_LINKS)
-  const [links, setLinks] = useState<LinkItem[]>(DUMMY_LINKS);
+  // Firestore(users/anonymous/links) 링크 목록 상태 관리
+  const [firestoreLinks, setFirestoreLinks] = useState<LinkItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("전체");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
+  // Firestore(users/anonymous/links) 실시간 구독 연동
+  useEffect(() => {
+    const unsubscribe = subscribeToAnonymousLinks((fetchedLinks) => {
+      setFirestoreLinks(fetchedLinks);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const links = useMemo(
+    () => mergeFirestoreLinks(firestoreLinks, DUMMY_LINKS),
+    [firestoreLinks]
+  );
+
   const handleAddLink = (newLink: LinkItem) => {
-    setLinks((prev) => [newLink, ...prev]);
+    setFirestoreLinks((prev) => mergeFirestoreLinks([newLink], prev));
     addStoreLink(newLink);
   };
 
