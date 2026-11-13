@@ -5,14 +5,21 @@ import { LinkItem } from "@/types";
 import { LinkButton } from "./LinkButton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search } from "lucide-react";
+import { Search, Loader2 } from "lucide-react";
 
 interface LinkListProps {
   links: LinkItem[];
   showFilter?: boolean;
+  isLoading?: boolean;
+  loadingMessage?: string;
 }
 
-export function LinkList({ links, showFilter = true }: LinkListProps) {
+export function LinkList({
+  links,
+  showFilter = true,
+  isLoading = false,
+  loadingMessage = "링크 목록을 불러오는 중...",
+}: LinkListProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("전체");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
@@ -84,8 +91,24 @@ export function LinkList({ links, showFilter = true }: LinkListProps) {
         </div>
       )}
 
+      {/* 로딩 / 갱신 인디케이터 배너 */}
+      {isLoading && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center justify-center gap-2 py-2.5 px-3 bg-[#BAE6FD] border-[2px] border-black rounded-[10px] shadow-[3px_3px_0px_#000000] text-xs font-black text-black"
+        >
+          <Loader2 className="w-4 h-4 animate-spin stroke-[2.5] shrink-0" />
+          <span>{loadingMessage}</span>
+        </div>
+      )}
+
       {/* 링크 목록 */}
-      <div className="flex flex-col gap-2.5">
+      <div
+        className={`flex flex-col gap-2.5 transition-opacity duration-200 ${
+          isLoading ? "opacity-60 pointer-events-none" : "opacity-100"
+        }`}
+      >
         {filteredLinks.length > 0 ? (
           filteredLinks.map((link) => (
             <LinkButton key={link.id} link={link} />

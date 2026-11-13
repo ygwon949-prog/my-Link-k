@@ -6,7 +6,7 @@ import { LinkItem } from "@/types";
 import { useProfileStore } from "@/store";
 import { DUMMY_LINKS, LINK_CATEGORIES } from "@/data";
 import {
-  subscribeToAnonymousLinks,
+  fetchAnonymousLinks,
   mergeFirestoreLinks,
 } from "@/lib/links";
 import { LinkButton } from "@/components/profile/LinkButton";
@@ -21,22 +21,40 @@ import {
   Button,
   Badge,
 } from "@/components/ui";
-import { Search, ArrowLeft, Filter, Sparkles } from "lucide-react";
+import { Search, ArrowLeft, Filter, Sparkles, Loader2 } from "lucide-react";
 
 export default function LinksPage() {
   const addStoreLink = useProfileStore((state) => state.addLink);
 
-  // Firestore(users/anonymous/links) 링크 목록 상태 관리
+  // Firestore(users/anonymous/links) 링크 목록 및 로딩/갱신 상태 관리
   const [firestoreLinks, setFirestoreLinks] = useState<LinkItem[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("전체");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Firestore(users/anonymous/links) 실시간 구독 연동
+  // 페이지 로드 시 Firestore(users/anonymous/links)에서 createdAt 최신순으로 링크 조회
   useEffect(() => {
-    const unsubscribe = subscribeToAnonymousLinks((fetchedLinks) => {
-      setFirestoreLinks(fetchedLinks);
-    });
-    return () => unsubscribe();
+    let isMountedEffect = true;
+
+    fetchAnonymousLinks()
+      .then((fetchedLinks) => {
+        if (isMountedEffect) {
+          setFirestoreLinks(fetchedLinks);
+        }
+      })
+      .catch((error) => {
+        console.error("Firestore 링크 목록 초기 조회 실패:", error);
+      })
+      .finally(() => {
+        if (isMountedEffect) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isMountedEffect = false;
+    };
   }, []);
 
   const links = useMemo(
@@ -47,6 +65,17 @@ export default function LinksPage() {
   const handleAddLink = (newLink: LinkItem) => {
     setFirestoreLinks((prev) => mergeFirestoreLinks([newLink], prev));
     addStoreLink(newLink);
+    setIsRefreshing(true);
+    fetchAnonymousLinks()
+      .then((fetchedLinks) => {
+        setFirestoreLinks(fetchedLinks);
+      })
+      .catch((error) => {
+        console.error("Firestore 링크 목록 갱신 실패:", error);
+      })
+      .finally(() => {
+        setIsRefreshing(false);
+      });
   };
 
   // 필터링 적용
@@ -167,11 +196,23 @@ export default function LinksPage() {
         {/* 링크 목록 결과 */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between px-1 text-xs font-black text-black">
-            <span>
-              검색 결과:{" "}
-              <strong className="text-blue-600">{filteredLinks.length}</strong>
-              개
-            </span>
+            <div className="flex items-center gap-2">
+              <span>
+                검색 결과:{" "}
+                <strong className="text-blue-600">{filteredLinks.length}</strong>
+                개
+              </span>
+              {(isLoading || isRefreshing) && (
+                <Badge
+                  variant="secondary"
+                  size="sm"
+                  className="font-black bg-[#BAE6FD] gap-1"
+                >
+                  <Loader2 className="w-3 h-3 animate-spin stroke-[2.5]" />
+                  <span>{isRefreshing ? "갱신 중..." : "불러오는 중..."}</span>
+                </Badge>
+              )}
+            </div>
             {(selectedCategory !== "전체" || searchQuery) && (
               <Button
                 variant="link"
@@ -187,8 +228,29 @@ export default function LinksPage() {
             )}
           </div>
 
+          {(isLoading || isRefreshing) && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex items-center justify-center gap-2 py-3 px-4 bg-[#BAE6FD] border-[2px] border-black rounded-[10px] shadow-[3px_3px_0px_#000000] text-xs sm:text-sm font-black text-black"
+            >
+              <Loader2 className="w-4 h-4 animate-spin stroke-[2.5] shrink-0" />
+              <span>
+                {isRefreshing
+                  ? "새 링크를 반영하여 목록을 갱신하는 중입니다..."
+                  : "Firestore에서 최신 링크 목록을 불러오는 중입니다..."}
+              </span>
+            </div>
+          )}
+
           {filteredLinks.length > 0 ? (
-            <div className="flex flex-col gap-2.5">
+            <div
+              className={`flex flex-col gap-2.5 transition-opacity duration-200 ${
+                isLoading || isRefreshing
+                  ? "opacity-60 pointer-events-none"
+                  : "opacity-100"
+              }`}
+            >
               {filteredLinks.map((link) => (
                 <LinkButton key={link.id} link={link} />
               ))}

@@ -27,7 +27,7 @@ export const INITIAL_LINKS: LinkItem[] = [
     description: "개인 오픈소스 프로젝트 및 일일 잔디 커밋 기록",
     category: "개발",
     isPinned: true,
-    createdAt: "2026-11-01T09:00:00Z",
+    createdAt: "2026-11-09T18:00:00Z",
   },
   {
     id: "link-2",
@@ -37,7 +37,7 @@ export const INITIAL_LINKS: LinkItem[] = [
     description: "Next.js 16 & Neobrutalism 스타일 링크인바이오 프로젝트",
     category: "프로젝트",
     isPinned: true,
-    createdAt: "2026-11-02T10:30:00Z",
+    createdAt: "2026-11-09T15:00:00Z",
   },
   {
     id: "link-3",
@@ -47,7 +47,7 @@ export const INITIAL_LINKS: LinkItem[] = [
     description: "프론트엔드 최적화 및 최신 웹 표준 기술 탐구 로그",
     category: "블로그",
     isPinned: false,
-    createdAt: "2026-11-03T14:15:00Z",
+    createdAt: "2026-11-09T12:00:00Z",
   },
   {
     id: "link-4",
@@ -57,7 +57,7 @@ export const INITIAL_LINKS: LinkItem[] = [
     description: "새로운 프로젝트 협업, 외주 및 커피챗 제안 환영",
     category: "연락처",
     isPinned: false,
-    createdAt: "2026-11-04T16:00:00Z",
+    createdAt: "2026-11-09T09:00:00Z",
   },
 ];
 
@@ -73,7 +73,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "개인 오픈소스 프로젝트 및 일일 잔디 커밋 기록",
     category: "개발",
     isPinned: true,
-    createdAt: "2026-11-01T09:00:00Z",
+    createdAt: "2026-11-09T18:00:00Z",
   },
   {
     id: "link-2",
@@ -83,7 +83,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "Next.js 16 & Neobrutalism 스타일 링크인바이오 프로젝트",
     category: "프로젝트",
     isPinned: true,
-    createdAt: "2026-11-02T10:30:00Z",
+    createdAt: "2026-11-09T15:00:00Z",
   },
   {
     id: "link-3",
@@ -93,7 +93,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "프론트엔드 최적화 및 최신 웹 표준 기술 탐구 로그",
     category: "블로그",
     isPinned: false,
-    createdAt: "2026-11-03T14:15:00Z",
+    createdAt: "2026-11-09T12:00:00Z",
   },
   {
     id: "link-4",
@@ -103,7 +103,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "새로운 프로젝트 협업, 외주 및 커피챗 제안 환영",
     category: "연락처",
     isPinned: false,
-    createdAt: "2026-11-04T16:00:00Z",
+    createdAt: "2026-11-09T09:00:00Z",
   },
   {
     id: "link-5",
@@ -113,7 +113,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "React 19 & Framer Motion 기반 인터랙티브 포트폴리오 사이트",
     category: "포트폴리오",
     isPinned: true,
-    createdAt: "2026-11-05T11:20:00Z",
+    createdAt: "2026-11-08T18:00:00Z",
   },
   {
     id: "link-6",
@@ -123,7 +123,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "업무 경력 사항 및 글로벌 개발자 네트워킹",
     category: "소셜",
     isPinned: false,
-    createdAt: "2026-11-06T08:45:00Z",
+    createdAt: "2026-11-07T15:00:00Z",
   },
   {
     id: "link-7",
@@ -143,7 +143,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "칸반 보드 스타일의 로컬 퍼스트 생산성 관리 툴",
     category: "프로젝트",
     isPinned: false,
-    createdAt: "2026-11-07T13:10:00Z",
+    createdAt: "2026-11-05T13:10:00Z",
   },
   {
     id: "link-9",
@@ -153,7 +153,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "개발자의 데스크 셋업, 공부 기록 및 일상 사진",
     category: "소셜",
     isPinned: false,
-    createdAt: "2026-11-08T18:20:00Z",
+    createdAt: "2026-11-04T18:20:00Z",
   },
   {
     id: "link-10",
@@ -163,7 +163,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "shadcn/ui 기반 네오브루탈리즘 테마 컴포넌트 오픈소스 라이브러리",
     category: "개발",
     isPinned: false,
-    createdAt: "2026-11-09T03:30:00Z",
+    createdAt: "2026-11-03T03:30:00Z",
   },
 ];
 

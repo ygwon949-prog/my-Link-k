@@ -6,7 +6,7 @@ import { useProfileStore } from "@/store";
 import { useMounted } from "@/hooks/useMounted";
 import { DEFAULT_PROFILE_DATA, DUMMY_LINKS, INITIAL_LINKS } from "@/data";
 import {
-  subscribeToAnonymousLinks,
+  fetchAnonymousLinks,
   mergeFirestoreLinks,
 } from "@/lib/links";
 import {
@@ -23,7 +23,7 @@ import {
 import { LinkList } from "./LinkList";
 import { SocialBar } from "./SocialBar";
 import { AddLinkDialog } from "./AddLinkDialog";
-import { Sparkles, Layers } from "lucide-react";
+import { Sparkles, Layers, Loader2 } from "lucide-react";
 
 export function ProfileCard() {
   const isMounted = useMounted();
@@ -34,28 +34,57 @@ export function ProfileCard() {
   // SSR hydration mismatch 방지: 마운트 전에는 DEFAULT_PROFILE_DATA 사용
   const profile = isMounted ? profileState : DEFAULT_PROFILE_DATA;
 
-  // Firestore(users/anonymous/links)에서 불러온 링크 상태 및 샘플 모드 상태 관리
+  // Firestore(users/anonymous/links)에서 불러온 링크 상태, 로딩/갱신 상태 및 샘플 모드 관리
   const [firestoreLinks, setFirestoreLinks] = useState<LinkItem[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isSampleMode, setIsSampleMode] = useState(false);
 
-  // Firestore(users/anonymous/links) 실시간 구독 연동
+  // 페이지 로드 시 Firestore(users/anonymous/links)에서 createdAt 최신순으로 링크 조회
   useEffect(() => {
-    const unsubscribe = subscribeToAnonymousLinks((fetchedLinks) => {
-      setFirestoreLinks(fetchedLinks);
-    });
-    return () => unsubscribe();
+    let isMountedEffect = true;
+
+    fetchAnonymousLinks()
+      .then((fetchedLinks) => {
+        if (isMountedEffect) {
+          setFirestoreLinks(fetchedLinks);
+        }
+      })
+      .catch((error) => {
+        console.error("Firestore 링크 목록 초기 조회 실패:", error);
+      })
+      .finally(() => {
+        if (isMountedEffect) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isMountedEffect = false;
+    };
   }, []);
 
-  // Firestore 저장 링크와 기본/샘플 링크를 중복 없이 병합
+  // Firestore 저장 링크와 기본/샘플 링크를 중복 없이 병합 (createdAt 최신순 정렬)
   const links = useMemo(() => {
     const baseLinks = isSampleMode ? DUMMY_LINKS : INITIAL_LINKS;
     return mergeFirestoreLinks(firestoreLinks, baseLinks);
   }, [firestoreLinks, isSampleMode]);
 
-  // 다이얼로그에서 Firestore 저장 후 새 링크 전달 시 즉시 상태 업데이트 (& 스토어 동기화)
+  // 다이얼로그에서 Firestore 저장 후 새 링크 전달 시 즉시 상태 업데이트 및 목록 갱신
   const handleAddLink = (newLink: LinkItem) => {
     setFirestoreLinks((prev) => mergeFirestoreLinks([newLink], prev));
     addStoreLink(newLink);
+    setIsRefreshing(true);
+    fetchAnonymousLinks()
+      .then((fetchedLinks) => {
+        setFirestoreLinks(fetchedLinks);
+      })
+      .catch((error) => {
+        console.error("Firestore 링크 목록 갱신 실패:", error);
+      })
+      .finally(() => {
+        setIsRefreshing(false);
+      });
   };
 
   // 샘플 데이터 전환 (INITIAL 4개 <-> DUMMY 10개 전체 목록)
@@ -141,6 +170,16 @@ export function ProfileCard() {
             <Badge variant="default" size="sm" className="font-black bg-white">
               {links.length}개
             </Badge>
+            {(isLoading || isRefreshing) && (
+              <Badge
+                variant="secondary"
+                size="sm"
+                className="font-black bg-[#BAE6FD] gap-1"
+              >
+                <Loader2 className="w-3 h-3 animate-spin stroke-[2.5]" />
+                <span>{isRefreshing ? "갱신 중..." : "불러오는 중..."}</span>
+              </Badge>
+            )}
           </div>
 
           <AddLinkDialog
@@ -153,7 +192,16 @@ export function ProfileCard() {
 
         {/* 인터랙티브 링크 목록 컴포넌트 */}
         <div className="-mt-2">
-          <LinkList links={links} showFilter={links.length > 3} />
+          <LinkList
+            links={links}
+            showFilter={links.length > 3}
+            isLoading={isLoading || isRefreshing}
+            loadingMessage={
+              isRefreshing
+                ? "새 링크를 반영하여 목록을 갱신하는 중입니다..."
+                : "Firestore에서 최신 링크 목록을 불러오는 중입니다..."
+            }
+          />
         </div>
 
         {/* 소셜 채널 아이콘 바 & Separator (shadcn/ui Separator 재사용) */}

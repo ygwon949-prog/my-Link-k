@@ -2,12 +2,10 @@ import {
   collection,
   addDoc,
   getDocs,
-  onSnapshot,
   query,
   orderBy,
   QueryDocumentSnapshot,
   DocumentData,
-  Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { LinkItem } from "@/types";
@@ -105,6 +103,19 @@ export async function addLinkToFirestore(
 }
 
 /**
+ * 링크 목록을 createdAt 기준 최신순(내림차순)으로 정렬합니다.
+ */
+export function sortLinksByCreatedAtDesc(links: LinkItem[]): LinkItem[] {
+  return [...links].sort((a, b) => {
+    const timeA = a.createdAt ? Date.parse(a.createdAt) : 0;
+    const timeB = b.createdAt ? Date.parse(b.createdAt) : 0;
+    const validTimeA = Number.isNaN(timeA) ? 0 : timeA;
+    const validTimeB = Number.isNaN(timeB) ? 0 : timeB;
+    return validTimeB - validTimeA;
+  });
+}
+
+/**
  * Firestore(경로: users/anonymous/links)에서 저장된 링크 목록을 최신순으로 조회합니다.
  */
 export async function fetchAnonymousLinks(): Promise<LinkItem[]> {
@@ -113,39 +124,13 @@ export async function fetchAnonymousLinks(): Promise<LinkItem[]> {
     orderBy("createdAt", "desc")
   );
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(mapDocToLinkItem);
+  const links = snapshot.docs.map(mapDocToLinkItem);
+  return sortLinksByCreatedAtDesc(links);
 }
 
 /**
- * Firestore(경로: users/anonymous/links) 컬렉션의 실시간 변경 사항을 구독합니다.
- */
-export function subscribeToAnonymousLinks(
-  onUpdate: (links: LinkItem[]) => void,
-  onError?: (error: Error) => void
-): Unsubscribe {
-  const q = query(
-    getAnonymousLinksCollection(),
-    orderBy("createdAt", "desc")
-  );
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const links = snapshot.docs.map(mapDocToLinkItem);
-      onUpdate(links);
-    },
-    (error) => {
-      if (onError) {
-        onError(error);
-      } else {
-        console.error("Firestore 링크 구독 중 오류 발생:", error);
-      }
-    }
-  );
-}
-
-/**
- * Firestore에서 불러온 링크 목록과 기본(Base) 링크 목록을 중복(ID 또는 URL) 없이 병합합니다.
+ * Firestore에서 불러온 링크 목록과 기본(Base) 링크 목록을 중복(ID 또는 URL) 없이 병합하고
+ * createdAt 기준 최신순으로 정렬하여 반환합니다.
  */
 export function mergeFirestoreLinks(
   firestoreLinks: LinkItem[],
@@ -165,5 +150,5 @@ export function mergeFirestoreLinks(
     merged.push(item);
   }
 
-  return merged;
+  return sortLinksByCreatedAtDesc(merged);
 }
