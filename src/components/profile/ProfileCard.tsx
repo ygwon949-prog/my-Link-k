@@ -30,14 +30,20 @@ export function ProfileCard() {
   const profileState = useProfileStore((state) => state.profile);
   const setStoreLinks = useProfileStore((state) => state.setLinks);
   const addStoreLink = useProfileStore((state) => state.addLink);
+  const updateStoreLink = useProfileStore((state) => state.updateLink);
+  const removeStoreLink = useProfileStore((state) => state.removeLink);
 
   // SSR hydration mismatch 방지: 마운트 전에는 DEFAULT_PROFILE_DATA 사용
   const profile = isMounted ? profileState : DEFAULT_PROFILE_DATA;
 
   // Firestore(users/anonymous/links)에서 불러온 링크 상태, 로딩/갱신 상태 및 샘플 모드 관리
   const [firestoreLinks, setFirestoreLinks] = useState<LinkItem[]>([]);
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [refreshMessage, setRefreshMessage] = useState<string>(
+    "링크 변경 사항을 반영하여 목록을 갱신하는 중입니다..."
+  );
   const [isSampleMode, setIsSampleMode] = useState(false);
 
   // 페이지 로드 시 Firestore(users/anonymous/links)에서 createdAt 최신순으로 링크 조회
@@ -66,17 +72,24 @@ export function ProfileCard() {
 
   // Firestore 저장 링크와 기본/샘플 링크를 중복 없이 병합 (createdAt 최신순 정렬)
   const links = useMemo(() => {
-    const baseLinks = isSampleMode ? DUMMY_LINKS : INITIAL_LINKS;
-    return mergeFirestoreLinks(firestoreLinks, baseLinks);
-  }, [firestoreLinks, isSampleMode]);
+    const baseLinks = (isSampleMode ? DUMMY_LINKS : INITIAL_LINKS).filter(
+      (item) => !deletedIds.includes(item.id)
+    );
+    const activeFirestoreLinks = firestoreLinks.filter(
+      (item) => !deletedIds.includes(item.id)
+    );
+    return mergeFirestoreLinks(activeFirestoreLinks, baseLinks);
+  }, [firestoreLinks, isSampleMode, deletedIds]);
 
-  // 다이얼로그에서 Firestore 저장 후 새 링크 전달 시 즉시 상태 업데이트 및 목록 갱신
-  const handleAddLink = (newLink: LinkItem) => {
-    setFirestoreLinks((prev) => mergeFirestoreLinks([newLink], prev));
-    addStoreLink(newLink);
+  // Firestore에서 최신 링크 목록을 다시 불러오는 갱신형 헬퍼
+  const refreshLinksFromFirestore = (message: string) => {
+    setRefreshMessage(message);
     setIsRefreshing(true);
-    fetchAnonymousLinks()
-      .then((fetchedLinks) => {
+    Promise.all([
+      fetchAnonymousLinks(),
+      new Promise((resolve) => setTimeout(resolve, 250)),
+    ])
+      .then(([fetchedLinks]) => {
         setFirestoreLinks(fetchedLinks);
       })
       .catch((error) => {
@@ -85,6 +98,42 @@ export function ProfileCard() {
       .finally(() => {
         setIsRefreshing(false);
       });
+  };
+
+  // 다이얼로그에서 Firestore 저장 후 새 링크 전달 시 상태 업데이트 및 목록 갱신
+  const handleAddLink = (newLink: LinkItem) => {
+    setFirestoreLinks((prev) => mergeFirestoreLinks([newLink], prev));
+    addStoreLink(newLink);
+    refreshLinksFromFirestore("새 링크를 반영하여 목록을 갱신하는 중입니다...");
+  };
+
+  // 인라인 편집에서 Firestore 수정 완료 시 상태 업데이트 및 목록 갱신
+  const handleUpdateLink = (updatedLink: LinkItem) => {
+    setFirestoreLinks((prev) => {
+      const exists = prev.some((item) => item.id === updatedLink.id);
+      if (exists) {
+        return prev.map((item) =>
+          item.id === updatedLink.id ? updatedLink : item
+        );
+      }
+      return [updatedLink, ...prev];
+    });
+    updateStoreLink(updatedLink.id, updatedLink);
+    refreshLinksFromFirestore(
+      "수정된 링크를 반영하여 목록을 갱신하는 중입니다..."
+    );
+  };
+
+  // 삭제 확인 모달에서 Firestore 삭제 완료 시 상태 업데이트 및 목록 갱신
+  const handleDeleteLink = (deletedId: string) => {
+    setDeletedIds((prev) =>
+      prev.includes(deletedId) ? prev : [...prev, deletedId]
+    );
+    setFirestoreLinks((prev) => prev.filter((item) => item.id !== deletedId));
+    removeStoreLink(deletedId);
+    refreshLinksFromFirestore(
+      "삭제된 링크를 반영하여 목록을 갱신하는 중입니다..."
+    );
   };
 
   // 샘플 데이터 전환 (INITIAL 4개 <-> DUMMY 10개 전체 목록)
@@ -198,9 +247,11 @@ export function ProfileCard() {
             isLoading={isLoading || isRefreshing}
             loadingMessage={
               isRefreshing
-                ? "새 링크를 반영하여 목록을 갱신하는 중입니다..."
+                ? refreshMessage
                 : "Firestore에서 최신 링크 목록을 불러오는 중입니다..."
             }
+            onUpdateLink={handleUpdateLink}
+            onDeleteLink={handleDeleteLink}
           />
         </div>
 

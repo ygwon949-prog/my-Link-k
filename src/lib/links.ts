@@ -1,6 +1,11 @@
 import {
   collection,
+  doc,
   addDoc,
+  updateDoc,
+  setDoc,
+  deleteDoc,
+  deleteField,
   getDocs,
   query,
   orderBy,
@@ -23,6 +28,19 @@ export const ANONYMOUS_LINKS_PATH = `${USERS_COLLECTION}/${ANONYMOUS_USER_ID}/${
  */
 export function getAnonymousLinksCollection() {
   return collection(db, USERS_COLLECTION, ANONYMOUS_USER_ID, LINKS_SUBCOLLECTION);
+}
+
+/**
+ * users/anonymous/links/{linkId} 문서 레퍼런스를 반환합니다.
+ */
+export function getAnonymousLinkDoc(linkId: string) {
+  return doc(
+    db,
+    USERS_COLLECTION,
+    ANONYMOUS_USER_ID,
+    LINKS_SUBCOLLECTION,
+    linkId
+  );
 }
 
 /**
@@ -100,6 +118,65 @@ export async function addLinkToFirestore(
     isPinned: payload.isPinned as boolean,
     createdAt,
   };
+}
+
+/**
+ * 기존 링크를 Firestore(경로: users/anonymous/links/{linkId})에서 수정합니다.
+ */
+export async function updateLinkInFirestore(
+  linkId: string,
+  linkInput: Omit<LinkItem, "id"> & { id?: string }
+): Promise<LinkItem> {
+  const createdAt = linkInput.createdAt || new Date().toISOString();
+  const trimmedDescription = linkInput.description?.trim();
+  const docRef = getAnonymousLinkDoc(linkId);
+
+  const baseFields: Record<string, unknown> = {
+    title: linkInput.title.trim(),
+    url: linkInput.url.trim(),
+    icon: linkInput.icon?.trim() || "🔗",
+    category: linkInput.category || "개발",
+    isPinned: Boolean(linkInput.isPinned),
+    createdAt,
+  };
+
+  try {
+    await updateDoc(docRef, {
+      ...baseFields,
+      description: trimmedDescription ? trimmedDescription : deleteField(),
+    });
+  } catch (error) {
+    const errCode = (error as { code?: string })?.code;
+    const errMsg = error instanceof Error ? error.message : "";
+    if (errCode === "not-found" || errMsg.includes("No document to update")) {
+      const setPayload: Record<string, unknown> = { ...baseFields };
+      if (trimmedDescription) {
+        setPayload.description = trimmedDescription;
+      }
+      await setDoc(docRef, setPayload);
+    } else {
+      throw error;
+    }
+  }
+
+  return {
+    id: linkId,
+    title: baseFields.title as string,
+    url: baseFields.url as string,
+    icon: baseFields.icon as string,
+    ...(trimmedDescription ? { description: trimmedDescription } : {}),
+    category: baseFields.category as string,
+    isPinned: baseFields.isPinned as boolean,
+    createdAt,
+  };
+}
+
+/**
+ * 기존 링크를 Firestore(경로: users/anonymous/links/{linkId})에서 삭제합니다.
+ */
+export async function deleteLinkFromFirestore(linkId: string): Promise<void> {
+  const docRef = getAnonymousLinkDoc(linkId);
+  await deleteDoc(docRef);
 }
 
 /**

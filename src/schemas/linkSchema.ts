@@ -53,9 +53,13 @@ export function isValidUrlOrMailto(rawUrl: string): boolean {
 }
 
 /**
- * 기존 링크 목록(중복 URL 검사용)을 주입받아 새 링크 추가용 Zod 스키마를 생성합니다.
+ * 기존 링크 목록(중복 URL 검사용)을 주입받아 링크 추가/수정용 Zod 스키마를 생성합니다.
+ * 수정 시에는 자기 자신의 링크 ID(excludeLinkId)를 전달하여 현재 링크의 URL과 중복 판정되지 않도록 합니다.
  */
-export function createAddLinkSchema(existingLinks: LinkItem[] = []) {
+export function createAddLinkSchema(
+  existingLinks: LinkItem[] = [],
+  excludeLinkId?: string
+) {
   return z.object({
     icon: z
       .string()
@@ -88,7 +92,9 @@ export function createAddLinkSchema(existingLinks: LinkItem[] = []) {
           if (!isValidUrlOrMailto(val)) return true;
           const normalized = normalizeUrl(val).toLowerCase();
           return !existingLinks.some(
-            (item) => item.url.trim().toLowerCase() === normalized
+            (item) =>
+              item.id !== excludeLinkId &&
+              item.url.trim().toLowerCase() === normalized
           );
         },
         {
@@ -110,7 +116,7 @@ export const addLinkSchema = createAddLinkSchema();
 export type AddLinkFormValues = z.infer<typeof addLinkSchema>;
 
 /**
- * 검증 완료된 폼 데이터를 LinkItem 객체로 변환합니다.
+ * 검증 완료된 폼 데이터를 새 LinkItem 객체로 변환합니다.
  */
 export function createLinkItemFromForm(data: AddLinkFormValues): LinkItem {
   return {
@@ -122,5 +128,23 @@ export function createLinkItemFromForm(data: AddLinkFormValues): LinkItem {
     category: data.category,
     isPinned: data.isPinned,
     createdAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 검증 완료된 폼 데이터를 기존 LinkItem 객체에 반영하여 수정된 LinkItem을 반환합니다.
+ */
+export function updateLinkItemFromForm(
+  existingLink: LinkItem,
+  data: AddLinkFormValues
+): LinkItem {
+  return {
+    ...existingLink,
+    title: data.title.trim(),
+    url: normalizeUrl(data.url),
+    icon: data.icon.trim() || "🔗",
+    description: data.description.trim() || undefined,
+    category: data.category,
+    isPinned: data.isPinned,
   };
 }

@@ -25,11 +25,17 @@ import { Search, ArrowLeft, Filter, Sparkles, Loader2 } from "lucide-react";
 
 export default function LinksPage() {
   const addStoreLink = useProfileStore((state) => state.addLink);
+  const updateStoreLink = useProfileStore((state) => state.updateLink);
+  const removeStoreLink = useProfileStore((state) => state.removeLink);
 
   // Firestore(users/anonymous/links) 링크 목록 및 로딩/갱신 상태 관리
   const [firestoreLinks, setFirestoreLinks] = useState<LinkItem[]>([]);
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [refreshMessage, setRefreshMessage] = useState<string>(
+    "링크 변경 사항을 반영하여 목록을 갱신하는 중입니다..."
+  );
   const [selectedCategory, setSelectedCategory] = useState<string>("전체");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
@@ -57,17 +63,24 @@ export default function LinksPage() {
     };
   }, []);
 
-  const links = useMemo(
-    () => mergeFirestoreLinks(firestoreLinks, DUMMY_LINKS),
-    [firestoreLinks]
-  );
+  const links = useMemo(() => {
+    const baseLinks = DUMMY_LINKS.filter(
+      (item) => !deletedIds.includes(item.id)
+    );
+    const activeFirestoreLinks = firestoreLinks.filter(
+      (item) => !deletedIds.includes(item.id)
+    );
+    return mergeFirestoreLinks(activeFirestoreLinks, baseLinks);
+  }, [firestoreLinks, deletedIds]);
 
-  const handleAddLink = (newLink: LinkItem) => {
-    setFirestoreLinks((prev) => mergeFirestoreLinks([newLink], prev));
-    addStoreLink(newLink);
+  const refreshLinksFromFirestore = (message: string) => {
+    setRefreshMessage(message);
     setIsRefreshing(true);
-    fetchAnonymousLinks()
-      .then((fetchedLinks) => {
+    Promise.all([
+      fetchAnonymousLinks(),
+      new Promise((resolve) => setTimeout(resolve, 250)),
+    ])
+      .then(([fetchedLinks]) => {
         setFirestoreLinks(fetchedLinks);
       })
       .catch((error) => {
@@ -76,6 +89,39 @@ export default function LinksPage() {
       .finally(() => {
         setIsRefreshing(false);
       });
+  };
+
+  const handleAddLink = (newLink: LinkItem) => {
+    setFirestoreLinks((prev) => mergeFirestoreLinks([newLink], prev));
+    addStoreLink(newLink);
+    refreshLinksFromFirestore("새 링크를 반영하여 목록을 갱신하는 중입니다...");
+  };
+
+  const handleUpdateLink = (updatedLink: LinkItem) => {
+    setFirestoreLinks((prev) => {
+      const exists = prev.some((item) => item.id === updatedLink.id);
+      if (exists) {
+        return prev.map((item) =>
+          item.id === updatedLink.id ? updatedLink : item
+        );
+      }
+      return [updatedLink, ...prev];
+    });
+    updateStoreLink(updatedLink.id, updatedLink);
+    refreshLinksFromFirestore(
+      "수정된 링크를 반영하여 목록을 갱신하는 중입니다..."
+    );
+  };
+
+  const handleDeleteLink = (deletedId: string) => {
+    setDeletedIds((prev) =>
+      prev.includes(deletedId) ? prev : [...prev, deletedId]
+    );
+    setFirestoreLinks((prev) => prev.filter((item) => item.id !== deletedId));
+    removeStoreLink(deletedId);
+    refreshLinksFromFirestore(
+      "삭제된 링크를 반영하여 목록을 갱신하는 중입니다..."
+    );
   };
 
   // 필터링 적용
@@ -237,7 +283,7 @@ export default function LinksPage() {
               <Loader2 className="w-4 h-4 animate-spin stroke-[2.5] shrink-0" />
               <span>
                 {isRefreshing
-                  ? "새 링크를 반영하여 목록을 갱신하는 중입니다..."
+                  ? refreshMessage
                   : "Firestore에서 최신 링크 목록을 불러오는 중입니다..."}
               </span>
             </div>
@@ -252,7 +298,13 @@ export default function LinksPage() {
               }`}
             >
               {filteredLinks.map((link) => (
-                <LinkButton key={link.id} link={link} />
+                <LinkButton
+                  key={link.id}
+                  link={link}
+                  existingLinks={links}
+                  onUpdateLink={handleUpdateLink}
+                  onDeleteLink={handleDeleteLink}
+                />
               ))}
             </div>
           ) : (

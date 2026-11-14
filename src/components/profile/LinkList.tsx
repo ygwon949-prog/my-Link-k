@@ -12,6 +12,8 @@ interface LinkListProps {
   showFilter?: boolean;
   isLoading?: boolean;
   loadingMessage?: string;
+  onUpdateLink?: (updatedLink: LinkItem) => void;
+  onDeleteLink?: (deletedId: string) => void;
 }
 
 export function LinkList({
@@ -19,6 +21,8 @@ export function LinkList({
   showFilter = true,
   isLoading = false,
   loadingMessage = "링크 목록을 불러오는 중...",
+  onUpdateLink,
+  onDeleteLink,
 }: LinkListProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("전체");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -111,7 +115,13 @@ export function LinkList({
       >
         {filteredLinks.length > 0 ? (
           filteredLinks.map((link) => (
-            <LinkButton key={link.id} link={link} />
+            <LinkButton
+              key={link.id}
+              link={link}
+              existingLinks={links}
+              onUpdateLink={onUpdateLink}
+              onDeleteLink={onDeleteLink}
+            />
           ))
         ) : (
           <div className="py-8 px-4 text-center bg-white/70 border-[2px] border-dashed border-black/40 rounded-[10px]">
