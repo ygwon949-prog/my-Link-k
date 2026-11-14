@@ -1,41 +1,397 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuthStore } from "@/store";
+import { useMounted } from "@/hooks/useMounted";
+import { getEmailDisplayName, getUserName } from "@/lib/links";
+import {
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+  Button,
+  Badge,
+  Menu,
+  MenuTrigger,
+  MenuContent,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuSeparator,
+} from "@/components/ui";
+import {
+  LogOut,
+  Loader2,
+  UserCheck,
+  ChevronDown,
+  Copy,
+  Check,
+  User,
+  LayoutGrid,
+} from "lucide-react";
+
+function GoogleIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="#4285F4"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+      />
+    </svg>
+  );
+}
 
 export default function Header() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const isMounted = useMounted();
+  const [isCopied, setIsCopied] = useState(false);
+
+  const user = useAuthStore((state) => state.user);
+  const isAuthLoading = useAuthStore((state) => state.isAuthLoading);
+  const isLoggingIn = useAuthStore((state) => state.isLoggingIn);
+  const isLoggingOut = useAuthStore((state) => state.isLoggingOut);
+  const initAuthListener = useAuthStore((state) => state.initAuthListener);
+  const loginWithGoogle = useAuthStore((state) => state.loginWithGoogle);
+  const logout = useAuthStore((state) => state.logout);
+
+  useEffect(() => {
+    const unsubscribe = initAuthListener();
+    return () => {
+      unsubscribe();
+    };
+  }, [initAuthListener]);
+
+  const isProfilePage = pathname === "/";
+  const isLinksPage = pathname?.startsWith("/links");
+  const displayName = user
+    ? getEmailDisplayName(user.email, user.displayName)
+    : "";
+  const username = user
+    ? getUserName(user.username, displayName, user.email)
+    : "";
+
+  const handleCopyProfileUrl = async () => {
+    if (typeof window === "undefined") return;
+    try {
+      const originUrl = window.location.origin;
+      await navigator.clipboard.writeText(originUrl);
+      setIsCopied(true);
+      setTimeout(() => {
+        setIsCopied(false);
+      }, 2000);
+    } catch (error) {
+      console.error("페이지 URL 복사 실패:", error);
+    }
+  };
+
   return (
     <header className="w-full border-b-[3px] border-black bg-white dark:bg-zinc-950 sticky top-0 z-50">
-      <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-3 sm:gap-6">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 font-black text-xl tracking-tight text-black dark:text-white"
+      <div className="max-w-5xl mx-auto px-3 sm:px-4 h-16 flex items-center justify-between gap-2">
+        {/* 좌측 로고 & 네비게이션 (@base-ui/react Button render 패턴 활용) */}
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <Button
+            variant="default"
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/" />}
+            className="h-9 px-2.5 sm:px-3 text-base sm:text-lg font-black tracking-tight rounded-[8px] shadow-[2px_2px_0px_#000000]"
           >
-            <span className="bg-[#FEF08A] text-black px-2.5 py-1 rounded-[8px] border-[2px] border-black shadow-[2px_2px_0px_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_#000000] transition-all">
-              ⚡ mylink
-            </span>
-          </Link>
+            ⚡ mylink
+          </Button>
 
-          <nav className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="px-2.5 py-1 rounded-[6px] text-xs sm:text-sm font-black text-black hover:bg-zinc-100 transition-colors"
+          <nav className="flex items-center gap-1.5 sm:gap-2">
+            <Button
+              variant={isProfilePage ? "default" : "ghost"}
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/" />}
+              className={`h-8 px-2.5 text-xs sm:text-sm font-black rounded-[6px] ${
+                isProfilePage
+                  ? "border-[1.5px] border-black shadow-[1.5px_1.5px_0px_#000000]"
+                  : "text-black"
+              }`}
             >
               프로필
-            </Link>
-            <Link
-              href="/links"
-              className="px-2.5 py-1 rounded-[6px] text-xs sm:text-sm font-black bg-[#BAE6FD] text-black border-[1.5px] border-black shadow-[1.5px_1.5px_0px_#000000] hover:translate-x-[0.5px] hover:translate-y-[0.5px] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all"
+            </Button>
+
+            <Button
+              variant={isLinksPage ? "secondary" : "outline"}
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/links" />}
+              className="h-8 px-2.5 text-xs sm:text-sm font-black rounded-[6px] border-[1.5px] border-black shadow-[1.5px_1.5px_0px_#000000]"
             >
               전체 링크
-            </Link>
+            </Button>
           </nav>
         </div>
 
-        <nav className="flex items-center gap-3">
-          <a
-            href="https://github.com/ygwon949-prog"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-white text-black text-xs sm:text-sm font-black border-[2px] border-black shadow-[2px_2px_0px_#000000] hover:translate-x-[1.5px] hover:translate-y-[1.5px] hover:shadow-[1px_1px_0px_#000000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all"
+        {/* 우측: Google 소셜 로그인 / 로그인 유저 정보(@base-ui/react Menu & Avatar & Button) + GitHub */}
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          {!isMounted || isAuthLoading ? (
+            <Badge
+              variant="secondary"
+              size="sm"
+              className="h-8 px-2.5 bg-zinc-100 text-black font-black gap-1.5 border-[2px] border-black shadow-[2px_2px_0px_#000000]"
+            >
+              <Loader2 className="w-3.5 h-3.5 animate-spin stroke-[2.5]" />
+              <span className="text-xs">확인 중...</span>
+            </Badge>
+          ) : user ? (
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              {/* @base-ui/react Menu + Avatar를 활용한 로그인 유저 정보 팝업 및 빠른 액션 메뉴 */}
+              <Menu>
+                <MenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      title={
+                        user.email
+                          ? `${username} (@${displayName} · ${user.email})`
+                          : `${username} (@${displayName})`
+                      }
+                      className="h-9 px-2 sm:px-2.5 bg-[#FFFBEB] hover:bg-[#FEF08A] text-black border-[2px] border-black shadow-[2px_2px_0px_#000000] gap-2 min-w-0"
+                    />
+                  }
+                >
+                  <Avatar
+                    size="xs"
+                    className="h-6 w-6 border-[1.5px] border-black shadow-none shrink-0"
+                  >
+                    <AvatarImage
+                      src={user.photoURL}
+                      alt={`${username} 프로필`}
+                    />
+                    <AvatarFallback className="text-xs">
+                      {username.charAt(0).toUpperCase() || "👤"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col min-w-0 text-left leading-tight">
+                    <span className="text-xs font-black text-black truncate max-w-[85px] sm:max-w-[130px]">
+                      {username}
+                    </span>
+                    <span className="text-[10px] font-bold text-black/65 truncate max-w-[95px] sm:max-w-[140px]">
+                      @{displayName}
+                    </span>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-black/70 shrink-0" />
+                </MenuTrigger>
+
+                <MenuContent align="end" className="w-[260px]">
+                  {/* 1. 로그인 계정 프로필 요약 */}
+                  <MenuGroup>
+                    <MenuGroupLabel className="flex items-center justify-between text-black">
+                      <span className="inline-flex items-center gap-1.5">
+                        <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>내 계정 정보</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        온라인
+                      </span>
+                    </MenuGroupLabel>
+                    <div className="p-2.5 rounded-[8px] bg-white border-[1.5px] border-black shadow-[1.5px_1.5px_0px_#000000] flex items-center gap-2.5 text-left">
+                      <Avatar
+                        size="xs"
+                        className="h-9 w-9 border-[1.5px] border-black shadow-none shrink-0"
+                      >
+                        <AvatarImage
+                          src={user.photoURL}
+                          alt={`${username} 프로필`}
+                        />
+                        <AvatarFallback className="text-xs">
+                          {username.charAt(0).toUpperCase() || "👤"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1 flex flex-col">
+                        <p className="text-xs sm:text-sm font-black text-black truncate">
+                          {username}
+                        </p>
+                        <p className="text-[11px] font-extrabold text-black/75 truncate">
+                          @{displayName}
+                        </p>
+                        {user.email && (
+                          <p className="text-[10px] font-semibold text-black/60 truncate mt-0.5">
+                            {user.email}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </MenuGroup>
+
+                  <MenuSeparator />
+
+                  {/* 2. 빠른 액션 메뉴 (내 페이지 URL 복사 · 프로필/전체 링크 이동) */}
+                  <MenuGroup>
+                    <MenuGroupLabel className="text-black/70">
+                      빠른 액션 메뉴
+                    </MenuGroupLabel>
+
+                    <MenuItem
+                      closeOnClick={false}
+                      onClick={() => {
+                        void handleCopyProfileUrl();
+                      }}
+                      className="justify-between"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        {isCopied ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5 stroke-[2.5]" />
+                        )}
+                        <span>
+                          {isCopied
+                            ? "페이지 주소 복사 완료!"
+                            : "내 페이지 URL 복사"}
+                        </span>
+                      </span>
+                      <Badge
+                        variant={isCopied ? "accent" : "default"}
+                        size="sm"
+                        className="px-1.5 py-0 text-[9px] shadow-[1px_1px_0px_#000000]"
+                      >
+                        {isCopied ? "COPIED" : "공유"}
+                      </Badge>
+                    </MenuItem>
+
+                    <MenuItem
+                      onClick={() => {
+                        router.push("/");
+                      }}
+                      className="justify-between"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <User className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>프로필 카드 보기</span>
+                      </span>
+                      {isProfilePage && (
+                        <Badge
+                          variant="primary"
+                          size="sm"
+                          className="px-1.5 py-0 text-[9px] shadow-[1px_1px_0px_#000000]"
+                        >
+                          현재
+                        </Badge>
+                      )}
+                    </MenuItem>
+
+                    <MenuItem
+                      onClick={() => {
+                        router.push("/links");
+                      }}
+                      className="justify-between"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <LayoutGrid className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>전체 링크 관리로 이동</span>
+                      </span>
+                      {isLinksPage && (
+                        <Badge
+                          variant="secondary"
+                          size="sm"
+                          className="px-1.5 py-0 text-[9px] shadow-[1px_1px_0px_#000000]"
+                        >
+                          현재
+                        </Badge>
+                      )}
+                    </MenuItem>
+                  </MenuGroup>
+
+                  <MenuSeparator />
+
+                  {/* 3. 로그아웃 */}
+                  <MenuItem
+                    onClick={() => {
+                      void logout();
+                    }}
+                    disabled={isLoggingOut}
+                    className="text-red-700 data-[highlighted]:bg-[#FEE2E2]"
+                  >
+                    <LogOut className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span>로그아웃</span>
+                  </MenuItem>
+                </MenuContent>
+              </Menu>
+
+              {/* 빠른 로그아웃 버튼 (@base-ui/react Button) */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isLoggingOut}
+                onClick={() => void logout()}
+                aria-label="로그아웃"
+                className="h-9 px-2.5 sm:px-3 text-xs font-black bg-[#FEE2E2] hover:bg-[#FCA5A5] text-black border-[2px] border-black shadow-[2px_2px_0px_#000000] shrink-0"
+              >
+                {isLoggingOut ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin stroke-[2.5]" />
+                    <span className="hidden sm:inline">로그아웃 중...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span className="hidden sm:inline">로그아웃</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              disabled={isLoggingIn}
+              onClick={() => void loginWithGoogle()}
+              className="h-9 px-2.5 sm:px-3.5 text-xs sm:text-sm font-black bg-[#FEF08A] hover:bg-[#FDE047] text-black border-[2px] border-black shadow-[2px_2px_0px_#000000] gap-1.5 shrink-0"
+            >
+              {isLoggingIn ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin stroke-[2.5]" />
+                  <span>로그인 중...</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-5 h-5 rounded-full bg-white border-[1.5px] border-black flex items-center justify-center shrink-0">
+                    <GoogleIcon className="w-3.5 h-3.5" />
+                  </span>
+                  <span>Google 로그인</span>
+                </>
+              )}
+            </Button>
+          )}
+
+          {/* GitHub 외부 링크 (@base-ui/react Button render 패턴) */}
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={
+              <a
+                href="https://github.com/ygwon949-prog"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="GitHub 방문하기"
+              />
+            }
+            className="hidden sm:inline-flex h-9 px-2.5 text-xs sm:text-sm font-black rounded-[8px] border-[2px] border-black shadow-[2px_2px_0px_#000000] shrink-0"
           >
             <svg
               className="w-4 h-4"
@@ -49,9 +405,9 @@ export default function Header() {
                 clipRule="evenodd"
               />
             </svg>
-            <span className="hidden sm:inline">GitHub</span>
-          </a>
-        </nav>
+            <span className="hidden lg:inline">GitHub</span>
+          </Button>
+        </div>
       </div>
     </header>
   );

@@ -14,6 +14,7 @@ interface LinkListProps {
   loadingMessage?: string;
   onUpdateLink?: (updatedLink: LinkItem) => void;
   onDeleteLink?: (deletedId: string) => void;
+  userId?: string;
 }
 
 export function LinkList({
@@ -23,6 +24,7 @@ export function LinkList({
   loadingMessage = "링크 목록을 불러오는 중...",
   onUpdateLink,
   onDeleteLink,
+  userId,
 }: LinkListProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("전체");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -121,6 +123,7 @@ export function LinkList({
               existingLinks={links}
               onUpdateLink={onUpdateLink}
               onDeleteLink={onDeleteLink}
+              userId={userId}
             />
           ))
         ) : (

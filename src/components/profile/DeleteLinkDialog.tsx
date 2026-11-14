@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { LinkItem } from "@/types";
 import { deleteLinkFromFirestore } from "@/lib/links";
+import { useAuthStore } from "@/store";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +22,7 @@ export interface DeleteLinkDialogProps {
   onOpenChange: (open: boolean) => void;
   onDeleteLink?: (deletedId: string) => void;
   onDeletingChange?: (isDeleting: boolean) => void;
+  userId?: string;
 }
 
 export function DeleteLinkDialog({
@@ -29,9 +31,12 @@ export function DeleteLinkDialog({
   onOpenChange,
   onDeleteLink,
   onDeletingChange,
+  userId,
 }: DeleteLinkDialogProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const authUser = useAuthStore((state) => state.user);
+  const effectiveUid = userId || authUser?.uid;
 
   const updateDeletingState = (nextState: boolean) => {
     setIsDeleting(nextState);
@@ -51,16 +56,13 @@ export function DeleteLinkDialog({
     updateDeletingState(true);
     try {
       await Promise.all([
-        deleteLinkFromFirestore(link.id),
+        deleteLinkFromFirestore(link.id, effectiveUid),
         new Promise((resolve) => setTimeout(resolve, 350)),
       ]);
       onDeleteLink?.(link.id);
       onOpenChange(false);
     } catch (error) {
-      console.error(
-        "Firestore 링크 삭제 실패 (users/anonymous/links):",
-        error
-      );
+      console.error("링크 삭제 실패:", error);
       setDeleteError(
         error instanceof Error
           ? `링크 삭제 중 오류가 발생했습니다: ${error.message}`

@@ -7,3 +7,5 @@ export * from "./separator";
 export * from "./dialog";
 export * from "./label";
 export * from "./field";
+export * from "./fieldset";
+export * from "./menu";

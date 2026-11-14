@@ -32,6 +32,7 @@ import {
 } from "@/components/ui";
 import { LinkButton } from "./LinkButton";
 import { addLinkToFirestore } from "@/lib/links";
+import { useAuthStore } from "@/store";
 import {
   Plus,
   Sparkles,
@@ -70,6 +71,7 @@ export interface AddLinkDialogProps {
   existingLinks?: LinkItem[];
   triggerLabel?: string;
   triggerClassName?: string;
+  userId?: string;
 }
 
 export function AddLinkDialog({
@@ -77,9 +79,12 @@ export function AddLinkDialog({
   existingLinks = [],
   triggerLabel = "새 링크 추가",
   triggerClassName,
+  userId,
 }: AddLinkDialogProps) {
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const authUser = useAuthStore((state) => state.user);
+  const effectiveUid = userId || authUser?.uid;
 
   // 기존 링크 목록을 반영한 동적 Zod 스키마 메모이제이션
   const schema = useMemo(
@@ -126,12 +131,12 @@ export function AddLinkDialog({
     setSubmitError(null);
     try {
       const draftLink = createLinkItemFromForm(data);
-      const savedLink = await addLinkToFirestore(draftLink);
+      const savedLink = await addLinkToFirestore(draftLink, effectiveUid);
       onAddLink?.(savedLink);
       reset(DEFAULT_VALUES);
       setOpen(false);
     } catch (error) {
-      console.error("Firestore 링크 저장 실패 (users/anonymous/links):", error);
+      console.error("링크 저장 실패:", error);
       setSubmitError(
         error instanceof Error
           ? `링크 저장 중 오류가 발생했습니다: ${error.message}`
@@ -183,7 +188,7 @@ export function AddLinkDialog({
 
       <DialogContent className="bg-[#FFFBEB]">
         <DialogHeader>
-          <div className="mb-1">
+          <div className="mb-1 flex items-center gap-1.5 flex-wrap">
             <Badge
               variant="primary"
               size="sm"
@@ -226,9 +231,11 @@ export function AddLinkDialog({
                 {PRESET_ICONS.map((emoji) => {
                   const isSelected = currentIcon === emoji;
                   return (
-                    <button
+                    <Button
                       key={emoji}
                       type="button"
+                      variant={isSelected ? "default" : "outline"}
+                      size="icon-sm"
                       onClick={() =>
                         setValue("icon", emoji, {
                           shouldValidate: true,
@@ -236,7 +243,7 @@ export function AddLinkDialog({
                           shouldTouch: true,
                         })
                       }
-                      className={`w-8 h-8 rounded-[8px] border-[2px] border-black flex items-center justify-center text-base transition-all cursor-pointer ${
+                      className={`w-8 h-8 rounded-[8px] border-[2px] border-black text-base transition-all cursor-pointer ${
                         isSelected
                           ? "bg-[#FEF08A] shadow-[2px_2px_0px_#000000] -translate-y-0.5"
                           : "bg-white hover:bg-zinc-100 shadow-[1px_1px_0px_#000000]"
@@ -244,7 +251,7 @@ export function AddLinkDialog({
                       title={`${emoji} 선택`}
                     >
                       {emoji}
-                    </button>
+                    </Button>
                   );
                 })}
               </div>
@@ -374,15 +381,17 @@ export function AddLinkDialog({
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <Label>카테고리</Label>
-              <button
+              <Button
                 type="button"
+                variant={currentIsPinned ? "default" : "outline"}
+                size="sm"
                 onClick={() =>
                   setValue("isPinned", !currentIsPinned, {
                     shouldDirty: true,
                     shouldValidate: true,
                   })
                 }
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] border-[2px] border-black text-xs font-black transition-all cursor-pointer ${
+                className={`h-7 px-2.5 py-1 rounded-[8px] border-[2px] border-black text-xs font-black transition-all cursor-pointer ${
                   currentIsPinned
                     ? "bg-[#FEF08A] text-black shadow-[2px_2px_0px_#000000]"
                     : "bg-white text-black/70 shadow-[1.5px_1.5px_0px_#000000] hover:bg-zinc-100"
@@ -392,7 +401,7 @@ export function AddLinkDialog({
                 <span>
                   {currentIsPinned ? "상단 PIN 고정됨" : "상단 PIN 고정"}
                 </span>
-              </button>
+              </Button>
             </div>
 
             <div className="flex items-center gap-1.5 flex-wrap">

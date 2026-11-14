@@ -3,14 +3,18 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { LinkItem } from "@/types";
-import { useProfileStore } from "@/store";
+import { useProfileStore, useAuthStore } from "@/store";
+import { useMounted } from "@/hooks/useMounted";
 import { DUMMY_LINKS, LINK_CATEGORIES } from "@/data";
 import {
-  fetchAnonymousLinks,
+  fetchUserLinks,
+  getEmailDisplayName,
+  getUserName,
   mergeFirestoreLinks,
 } from "@/lib/links";
 import { LinkButton } from "@/components/profile/LinkButton";
 import { AddLinkDialog } from "@/components/profile/AddLinkDialog";
+import { LoginRequiredCard } from "@/components/profile/LoginRequiredCard";
 import {
   Card,
   CardHeader,
@@ -20,18 +24,32 @@ import {
   Input,
   Button,
   Badge,
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
 } from "@/components/ui";
-import { Search, ArrowLeft, Filter, Sparkles, Loader2 } from "lucide-react";
+import {
+  Search,
+  ArrowLeft,
+  Filter,
+  Sparkles,
+  Loader2,
+  Mail,
+} from "lucide-react";
 
 export default function LinksPage() {
+  const isMounted = useMounted();
+  const user = useAuthStore((state) => state.user);
+  const isAuthLoading = useAuthStore((state) => state.isAuthLoading);
+
   const addStoreLink = useProfileStore((state) => state.addLink);
   const updateStoreLink = useProfileStore((state) => state.updateLink);
   const removeStoreLink = useProfileStore((state) => state.removeLink);
 
-  // Firestore(users/anonymous/links) 링크 목록 및 로딩/갱신 상태 관리
+  // Firestore(users/{user.uid}/links) 링크 목록 및 로딩/갱신 상태 관리
   const [firestoreLinks, setFirestoreLinks] = useState<LinkItem[]>([]);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadedUid, setLoadedUid] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [refreshMessage, setRefreshMessage] = useState<string>(
     "링크 변경 사항을 반영하여 목록을 갱신하는 중입니다..."
@@ -39,45 +57,56 @@ export default function LinksPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("전체");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // 페이지 로드 시 Firestore(users/anonymous/links)에서 createdAt 최신순으로 링크 조회
+  const currentUid = user?.uid;
+  const isLoading = Boolean(currentUid) && loadedUid !== currentUid;
+
+  // 로그인한 사용자(user.uid) 변경 시 Firestore(users/{user.uid}/links)에서 최신순 링크 조회
   useEffect(() => {
+    if (!currentUid) {
+      return;
+    }
+
     let isMountedEffect = true;
 
-    fetchAnonymousLinks()
+    fetchUserLinks(currentUid)
       .then((fetchedLinks) => {
         if (isMountedEffect) {
           setFirestoreLinks(fetchedLinks);
+          setDeletedIds([]);
         }
       })
       .catch((error) => {
-        console.error("Firestore 링크 목록 초기 조회 실패:", error);
+        console.error("개인화 링크 목록 조회 실패:", error);
       })
       .finally(() => {
         if (isMountedEffect) {
-          setIsLoading(false);
+          setLoadedUid(currentUid);
         }
       });
 
     return () => {
       isMountedEffect = false;
     };
-  }, []);
+  }, [currentUid]);
 
   const links = useMemo(() => {
+    const scopedFirestoreLinks =
+      currentUid && loadedUid === currentUid ? firestoreLinks : [];
     const baseLinks = DUMMY_LINKS.filter(
       (item) => !deletedIds.includes(item.id)
     );
-    const activeFirestoreLinks = firestoreLinks.filter(
+    const activeFirestoreLinks = scopedFirestoreLinks.filter(
       (item) => !deletedIds.includes(item.id)
     );
     return mergeFirestoreLinks(activeFirestoreLinks, baseLinks);
-  }, [firestoreLinks, deletedIds]);
+  }, [currentUid, loadedUid, firestoreLinks, deletedIds]);
 
   const refreshLinksFromFirestore = (message: string) => {
+    if (!currentUid) return;
     setRefreshMessage(message);
     setIsRefreshing(true);
     Promise.all([
-      fetchAnonymousLinks(),
+      fetchUserLinks(currentUid),
       new Promise((resolve) => setTimeout(resolve, 250)),
     ])
       .then(([fetchedLinks]) => {
@@ -138,36 +167,86 @@ export default function LinksPage() {
     });
   }, [links, selectedCategory, searchQuery]);
 
+  // 1. 마운트 전 또는 인증 상태 확인 중일 때
+  if (!isMounted || isAuthLoading) {
+    return (
+      <main className="relative flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8 bg-[#FFFBEB] dark:bg-zinc-950 min-h-[calc(100vh-64px)]">
+        <div className="absolute inset-0 bg-[radial-gradient(#000000_1.5px,transparent_1.5px)] dark:bg-[radial-gradient(#ffffff_1.5px,transparent_1.5px)] [background-size:24px_24px] opacity-10 pointer-events-none" />
+        <Card
+          variant="default"
+          className="relative w-full max-w-[440px] sm:max-w-[460px] p-8 mx-auto text-center"
+        >
+          <CardContent className="p-0 flex flex-col items-center justify-center gap-3 py-8">
+            <div className="w-14 h-14 rounded-full bg-white border-[2.5px] border-black shadow-[3px_3px_0px_#000000] flex items-center justify-center">
+              <Loader2 className="w-7 h-7 animate-spin text-black stroke-[2.5]" />
+            </div>
+            <p className="text-base font-black text-black">
+              로그인 상태 및 전체 링크 정보를 확인하는 중입니다...
+            </p>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
+  // 2. 로그인하지 않은 상태일 때: 로그인 필요 안내 문구 화면 표시
+  if (!user) {
+    return (
+      <main className="relative flex-1 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 bg-[#FFFBEB] dark:bg-zinc-950 min-h-[calc(100vh-64px)]">
+        <div className="absolute inset-0 bg-[radial-gradient(#000000_1.5px,transparent_1.5px)] dark:bg-[radial-gradient(#ffffff_1.5px,transparent_1.5px)] [background-size:24px_24px] opacity-10 pointer-events-none" />
+        <div className="relative w-full max-w-[480px] mx-auto flex flex-col gap-4">
+          <div>
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/" />}
+              className="gap-1.5 text-xs sm:text-sm font-black"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>프로필 카드로 돌아가기</span>
+            </Button>
+          </div>
+          <LoginRequiredCard pageTitle="전체 링크 모아보기" />
+        </div>
+      </main>
+    );
+  }
+
+  const displayName = getEmailDisplayName(user.email, user.displayName);
+  const username = getUserName(user.username, displayName, user.email);
+
   return (
     <main className="relative flex-1 p-4 sm:p-6 md:p-8 bg-[#FFFBEB] dark:bg-zinc-950 min-h-[calc(100vh-64px)]">
       {/* 배경 도트 패턴 (Tailwind CSS) */}
       <div className="absolute inset-0 bg-[radial-gradient(#000000_1.5px,transparent_1.5px)] dark:bg-[radial-gradient(#ffffff_1.5px,transparent_1.5px)] [background-size:24px_24px] opacity-10 pointer-events-none" />
 
       <div className="relative max-w-2xl mx-auto flex flex-col gap-5 sm:gap-6">
-        {/* 상단 내비게이션 바 (shadcn/ui Button 및 AddLinkDialog 재사용) */}
+        {/* 상단 내비게이션 바 (Base UI Button render 및 AddLinkDialog 재사용) */}
         <div className="flex items-center justify-between gap-2">
-          <Link href="/">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs sm:text-sm font-black"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>프로필 카드로 돌아가기</span>
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/" />}
+            className="gap-1.5 text-xs sm:text-sm font-black"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>프로필 카드로 돌아가기</span>
+          </Button>
 
           <AddLinkDialog
             onAddLink={handleAddLink}
             existingLinks={links}
+            userId={user.uid}
             triggerLabel="새 링크 추가"
             triggerClassName="text-xs font-black shrink-0"
           />
         </div>
 
-        {/* 페이지 헤더 카드 (shadcn/ui Card, CardHeader, CardTitle, CardDescription 재사용) */}
+        {/* 페이지 헤더 카드 (유저 정보 + 개인화 경로 표시) */}
         <Card variant="secondary" className="p-0">
-          <CardHeader className="p-5 sm:p-6">
+          <CardHeader className="p-5 sm:p-6 flex flex-col gap-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <Badge
@@ -179,10 +258,10 @@ export default function LinksPage() {
                   <span>ALL LINKS DIRECTORY</span>
                 </Badge>
                 <CardTitle className="text-2xl sm:text-3xl">
-                  링크 모아보기
+                  {username}님의 링크 모아보기
                 </CardTitle>
                 <CardDescription className="mt-1 text-black/80 font-bold">
-                  개발 프로젝트, 기술 블로그, 포트폴리오 등 엄선된 링크 모음입니다.
+                  개발 프로젝트, 기술 블로그, 포트폴리오 등 개인화된 링크 모음입니다.
                 </CardDescription>
               </div>
 
@@ -192,6 +271,39 @@ export default function LinksPage() {
                   {links.length}
                 </span>
               </div>
+            </div>
+
+            {/* 로그인된 유저 정보 배너 */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-[10px] bg-white/90 border-[2px] border-black shadow-[2px_2px_0px_#000000]">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Avatar
+                  size="xs"
+                  className="h-8 w-8 border-[1.5px] border-black shadow-none shrink-0"
+                >
+                  <AvatarImage
+                    src={user.photoURL}
+                    alt={`${username} 프로필`}
+                  />
+                  <AvatarFallback className="text-xs">
+                    {username.charAt(0).toUpperCase() || "👤"}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-black text-black truncate">
+                    {username}
+                  </span>
+                  <span className="text-[11px] font-bold text-black/65 truncate">
+                    @{displayName}
+                  </span>
+                </div>
+              </div>
+
+              {user.email && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-black/70 truncate">
+                  <Mail className="w-3 h-3 shrink-0" />
+                  <span>{user.email}</span>
+                </span>
+              )}
             </div>
           </CardHeader>
         </Card>
@@ -284,7 +396,7 @@ export default function LinksPage() {
               <span>
                 {isRefreshing
                   ? refreshMessage
-                  : "Firestore에서 최신 링크 목록을 불러오는 중입니다..."}
+                  : "최신 링크 목록을 불러오는 중입니다..."}
               </span>
             </div>
           )}
@@ -304,6 +416,7 @@ export default function LinksPage() {
                   existingLinks={links}
                   onUpdateLink={handleUpdateLink}
                   onDeleteLink={handleDeleteLink}
+                  userId={user.uid}
                 />
               ))}
             </div>

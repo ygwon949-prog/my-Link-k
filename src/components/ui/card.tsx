@@ -1,4 +1,7 @@
-import * as React from "react";
+"use client";
+
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
@@ -20,86 +23,132 @@ const cardVariants = cva(
   }
 );
 
-export interface CardProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof cardVariants> {}
+export type CardProps = useRender.ComponentProps<"div"> &
+  VariantProps<typeof cardVariants>;
 
-function Card({ className, variant, ...props }: CardProps) {
-  return (
-    <div
-      data-slot="card"
-      className={cn(cardVariants({ variant }), className)}
-      {...props}
-    />
-  );
+function Card({
+  className,
+  variant = "default",
+  render,
+  ...props
+}: CardProps) {
+  return useRender({
+    defaultTagName: "div",
+    render,
+    props: mergeProps<"div">(
+      {
+        className: cn(cardVariants({ variant }), className),
+      },
+      props
+    ),
+    state: {
+      slot: "card",
+      variant,
+    },
+  });
 }
 
 function CardHeader({
   className,
+  render,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      data-slot="card-header"
-      className={cn("flex flex-col space-y-1.5 p-6", className)}
-      {...props}
-    />
-  );
+}: useRender.ComponentProps<"div">) {
+  return useRender({
+    defaultTagName: "div",
+    render,
+    props: mergeProps<"div">(
+      {
+        className: cn("flex flex-col space-y-1.5 p-6", className),
+      },
+      props
+    ),
+    state: {
+      slot: "card-header",
+    },
+  });
 }
 
 function CardTitle({
   className,
+  render,
   ...props
-}: React.HTMLAttributes<HTMLHeadingElement>) {
-  return (
-    <h3
-      data-slot="card-title"
-      className={cn(
-        "font-black text-2xl tracking-tight leading-none text-black",
-        className
-      )}
-      {...props}
-    />
-  );
+}: useRender.ComponentProps<"h3">) {
+  return useRender({
+    defaultTagName: "h3",
+    render,
+    props: mergeProps<"h3">(
+      {
+        className: cn(
+          "font-black text-2xl tracking-tight leading-none text-black",
+          className
+        ),
+      },
+      props
+    ),
+    state: {
+      slot: "card-title",
+    },
+  });
 }
 
 function CardDescription({
   className,
+  render,
   ...props
-}: React.HTMLAttributes<HTMLParagraphElement>) {
-  return (
-    <p
-      data-slot="card-description"
-      className={cn("text-sm font-semibold text-black/80", className)}
-      {...props}
-    />
-  );
+}: useRender.ComponentProps<"p">) {
+  return useRender({
+    defaultTagName: "p",
+    render,
+    props: mergeProps<"p">(
+      {
+        className: cn("text-sm font-semibold text-black/80", className),
+      },
+      props
+    ),
+    state: {
+      slot: "card-description",
+    },
+  });
 }
 
 function CardContent({
   className,
+  render,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      data-slot="card-content"
-      className={cn("p-6 pt-0", className)}
-      {...props}
-    />
-  );
+}: useRender.ComponentProps<"div">) {
+  return useRender({
+    defaultTagName: "div",
+    render,
+    props: mergeProps<"div">(
+      {
+        className: cn("p-6 pt-0", className),
+      },
+      props
+    ),
+    state: {
+      slot: "card-content",
+    },
+  });
 }
 
 function CardFooter({
   className,
+  render,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      data-slot="card-footer"
-      className={cn("flex items-center p-6 pt-0", className)}
-      {...props}
-    />
-  );
+}: useRender.ComponentProps<"div">) {
+  return useRender({
+    defaultTagName: "div",
+    render,
+    props: mergeProps<"div">(
+      {
+        className: cn("flex items-center p-6 pt-0", className),
+      },
+      props
+    ),
+    state: {
+      slot: "card-footer",
+    },
+  });
 }
 
 export {

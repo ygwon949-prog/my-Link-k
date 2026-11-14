@@ -14,10 +14,12 @@ import {
   DESCRIPTION_MAX_LENGTH,
 } from "@/schemas";
 import { updateLinkInFirestore } from "@/lib/links";
+import { useAuthStore } from "@/store";
 import {
   Field,
   FieldLabel,
   FieldError,
+  Fieldset,
   Button,
   Input,
   Label,
@@ -59,6 +61,7 @@ export interface LinkButtonProps {
   onUpdateLink?: (updatedLink: LinkItem) => void;
   onDeleteLink?: (deletedId: string) => void;
   showActions?: boolean;
+  userId?: string;
 }
 
 export function LinkButton({
@@ -68,10 +71,13 @@ export function LinkButton({
   onUpdateLink,
   onDeleteLink,
   showActions,
+  userId,
 }: LinkButtonProps) {
   const isPreview = link.id === "preview";
   const shouldShowActions = showActions ?? !isPreview;
   const isMail = link.url.startsWith("mailto:");
+  const authUser = useAuthStore((state) => state.user);
+  const effectiveUid = userId || authUser?.uid;
 
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -146,13 +152,13 @@ export function LinkButton({
     try {
       const updatedDraft = updateLinkItemFromForm(link, data);
       const [savedLink] = await Promise.all([
-        updateLinkInFirestore(link.id, updatedDraft),
+        updateLinkInFirestore(link.id, updatedDraft, effectiveUid),
         new Promise((resolve) => setTimeout(resolve, 350)),
       ]);
       onUpdateLink?.(savedLink);
       setIsEditing(false);
     } catch (error) {
-      console.error("Firestore 링크 수정 실패 (users/anonymous/links):", error);
+      console.error("링크 수정 실패:", error);
       setSubmitError(
         error instanceof Error
           ? `링크 수정 중 오류가 발생했습니다: ${error.message}`
@@ -206,15 +212,17 @@ export function LinkButton({
               </Badge>
             )}
           </div>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="icon-sm"
             disabled={isSubmitting}
             onClick={handleCancelEdit}
             aria-label="수정 취소"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] border-[2px] border-black bg-white text-black shadow-[1.5px_1.5px_0px_#000000] hover:bg-zinc-100 cursor-pointer disabled:opacity-50"
+            className="h-7 w-7 rounded-[6px] border-[2px] border-black bg-white text-black shadow-[1.5px_1.5px_0px_#000000] hover:bg-zinc-100 cursor-pointer disabled:opacity-50"
           >
             <X className="w-3.5 h-3.5 stroke-[2.5]" />
-          </button>
+          </Button>
         </div>
 
         <form
@@ -222,13 +230,7 @@ export function LinkButton({
           noValidate
           className="flex flex-col gap-3.5"
         >
-          <fieldset
-            disabled={isSubmitting}
-            className={cn(
-              "flex flex-col gap-3.5 border-none p-0 m-0 min-w-0 transition-opacity",
-              isSubmitting && "opacity-60 pointer-events-none"
-            )}
-          >
+          <Fieldset disabled={isSubmitting}>
             {/* 1. 아이콘(이모지) 선택 */}
             <Field
               name="icon"
@@ -251,9 +253,11 @@ export function LinkButton({
                   {PRESET_ICONS.map((emoji) => {
                     const isSelected = currentIcon === emoji;
                     return (
-                      <button
+                      <Button
                         key={emoji}
                         type="button"
+                        variant={isSelected ? "default" : "outline"}
+                        size="icon-sm"
                         onClick={() =>
                           setValue("icon", emoji, {
                             shouldValidate: true,
@@ -261,7 +265,7 @@ export function LinkButton({
                             shouldTouch: true,
                           })
                         }
-                        className={`w-7 h-7 rounded-[6px] border-[1.5px] border-black flex items-center justify-center text-sm transition-all cursor-pointer ${
+                        className={`w-7 h-7 rounded-[6px] border-[1.5px] border-black text-sm transition-all cursor-pointer ${
                           isSelected
                             ? "bg-[#FEF08A] shadow-[1.5px_1.5px_0px_#000000] -translate-y-0.5"
                             : "bg-white hover:bg-zinc-100 shadow-[1px_1px_0px_#000000]"
@@ -269,7 +273,7 @@ export function LinkButton({
                         title={`${emoji} 선택`}
                       >
                         {emoji}
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
@@ -400,15 +404,17 @@ export function LinkButton({
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <Label>카테고리</Label>
-                <button
+                <Button
                   type="button"
+                  variant={currentIsPinned ? "default" : "outline"}
+                  size="sm"
                   onClick={() =>
                     setValue("isPinned", !currentIsPinned, {
                       shouldDirty: true,
                       shouldValidate: true,
                     })
                   }
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] border-[2px] border-black text-xs font-black transition-all cursor-pointer ${
+                  className={`h-7 px-2.5 py-1 rounded-[8px] border-[2px] border-black text-xs font-black transition-all cursor-pointer ${
                     currentIsPinned
                       ? "bg-[#FEF08A] text-black shadow-[2px_2px_0px_#000000]"
                       : "bg-white text-black/70 shadow-[1.5px_1.5px_0px_#000000] hover:bg-zinc-100"
@@ -418,7 +424,7 @@ export function LinkButton({
                   <span>
                     {currentIsPinned ? "상단 PIN 고정됨" : "상단 PIN 고정"}
                   </span>
-                </button>
+                </Button>
               </div>
 
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -448,7 +454,7 @@ export function LinkButton({
                 })}
               </div>
             </div>
-          </fieldset>
+          </Fieldset>
 
           {/* 수정 저장 진행 중 로딩 표시 배너 */}
           {isSubmitting && (
@@ -607,6 +613,7 @@ export function LinkButton({
           onOpenChange={setIsDeleteDialogOpen}
           onDeleteLink={onDeleteLink}
           onDeletingChange={setIsDeletingCard}
+          userId={effectiveUid}
         />
       )}
     </>

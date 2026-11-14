@@ -6,17 +6,20 @@ import {
   setDoc,
   deleteDoc,
   deleteField,
+  getDoc,
   getDocs,
   query,
   orderBy,
   QueryDocumentSnapshot,
   DocumentData,
 } from "firebase/firestore";
-import { db } from "./firebase";
-import { LinkItem } from "@/types";
+import { User } from "firebase/auth";
+import { db, auth } from "./firebase";
+import { LinkItem, UserProfile } from "@/types";
+import { DEFAULT_PROFILE_DATA } from "@/data";
 
 /**
- * 익명 사용자 링크 저장용 Firestore 컬렉션 경로: users/anonymous/links
+ * 사용자별 개인화 링크 저장용 Firestore 컬렉션 경로: users/{user.uid}/links
  */
 export const USERS_COLLECTION = "users";
 export const ANONYMOUS_USER_ID = "anonymous";
@@ -24,23 +27,261 @@ export const LINKS_SUBCOLLECTION = "links";
 export const ANONYMOUS_LINKS_PATH = `${USERS_COLLECTION}/${ANONYMOUS_USER_ID}/${LINKS_SUBCOLLECTION}`;
 
 /**
- * users/anonymous/links 컬렉션 레퍼런스를 반환합니다.
+ * users/{uid} 문서 경로 문자열을 반환합니다.
  */
-export function getAnonymousLinksCollection() {
-  return collection(db, USERS_COLLECTION, ANONYMOUS_USER_ID, LINKS_SUBCOLLECTION);
+export function getUserDocPath(uid: string): string {
+  return `${USERS_COLLECTION}/${uid}`;
 }
 
 /**
- * users/anonymous/links/{linkId} 문서 레퍼런스를 반환합니다.
+ * users/{uid}/links 서브컬렉션 경로 문자열을 반환합니다.
+ */
+export function getUserLinksPath(uid: string): string {
+  return `${USERS_COLLECTION}/${uid}/${LINKS_SUBCOLLECTION}`;
+}
+
+/**
+ * users/{uid} 문서 레퍼런스를 반환합니다.
+ */
+export function getUserDoc(uid: string) {
+  return doc(db, USERS_COLLECTION, uid);
+}
+
+/**
+ * users/{uid}/links 컬렉션 레퍼런스를 반환합니다.
+ */
+export function getUserLinksCollection(uid: string) {
+  return collection(db, USERS_COLLECTION, uid, LINKS_SUBCOLLECTION);
+}
+
+/**
+ * users/{uid}/links/{linkId} 문서 레퍼런스를 반환합니다.
+ */
+export function getUserLinkDoc(uid: string, linkId: string) {
+  return doc(db, USERS_COLLECTION, uid, LINKS_SUBCOLLECTION, linkId);
+}
+
+/**
+ * (하위 호환용) users/anonymous/links 컬렉션 레퍼런스를 반환합니다.
+ */
+export function getAnonymousLinksCollection() {
+  const uid = auth.currentUser?.uid || ANONYMOUS_USER_ID;
+  return getUserLinksCollection(uid);
+}
+
+/**
+ * (하위 호환용) users/anonymous/links/{linkId} 문서 레퍼런스를 반환합니다.
  */
 export function getAnonymousLinkDoc(linkId: string) {
-  return doc(
-    db,
-    USERS_COLLECTION,
-    ANONYMOUS_USER_ID,
-    LINKS_SUBCOLLECTION,
-    linkId
+  const uid = auth.currentUser?.uid || ANONYMOUS_USER_ID;
+  return getUserLinkDoc(uid, linkId);
+}
+
+/**
+ * 현재 요청에 사용할 사용자 UID를 확인합니다.
+ */
+function resolveTargetUid(uid?: string): string {
+  const resolved = uid?.trim() || auth.currentUser?.uid;
+  if (!resolved) {
+    throw new Error("로그인이 필요한 기능입니다. Google 계정으로 로그인 후 다시 시도해주세요.");
+  }
+  return resolved;
+}
+
+/**
+ * 이메일 주소에서 '@' 앞부분을 추출하여 반환합니다 (displayName 용도).
+ */
+export function getEmailDisplayName(
+  email?: string | null,
+  fallbackName?: string | null
+): string {
+  const emailPrefix = email ? email.split("@")[0]?.trim() : "";
+  if (emailPrefix) {
+    return emailPrefix;
+  }
+  return fallbackName?.trim() || DEFAULT_PROFILE_DATA.name;
+}
+
+/**
+ * 사용자의 표시용 이름(username)을 반환합니다.
+ * Google 로그인 시 전달되는 이름(authDisplayName)을 최우선으로 사용합니다.
+ */
+export function getUserName(
+  username?: string | null,
+  fallbackDisplayName?: string | null,
+  email?: string | null
+): string {
+  if (username?.trim()) {
+    return username.trim();
+  }
+  if (fallbackDisplayName?.trim()) {
+    return fallbackDisplayName.trim();
+  }
+  return getEmailDisplayName(email);
+}
+
+/**
+ * Firebase Auth의 User 객체로부터 기본 UserProfile 객체를 생성합니다.
+ * - username: 로그인 시 Google 계정에서 나오는 이름(firebaseUser.displayName)
+ * - displayName: 이메일의 앞부분('@' 이전 문자열)
+ */
+export function buildUserProfileFromAuth(firebaseUser: User): UserProfile {
+  const displayName = getEmailDisplayName(
+    firebaseUser.email,
+    firebaseUser.displayName
   );
+  const username = getUserName(
+    firebaseUser.displayName,
+    displayName,
+    firebaseUser.email
+  );
+
+  return {
+    uid: firebaseUser.uid,
+    username,
+    displayName,
+    email: firebaseUser.email || "",
+    photoURL:
+      firebaseUser.photoURL || DEFAULT_PROFILE_DATA.avatarUrl || "/avatar.png",
+    badge: DEFAULT_PROFILE_DATA.badge,
+    bio: DEFAULT_PROFILE_DATA.bio,
+    lastLoginAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 로그인한 사용자의 프로필 정보를 Firestore(경로: users/{user.uid})에 동기화하고
+ * 해당 경로에 저장된 최신 유저 정보를 반환합니다.
+ */
+export async function syncUserProfileToFirestore(
+  firebaseUser: User
+): Promise<UserProfile> {
+  const baseProfile = buildUserProfileFromAuth(firebaseUser);
+  const userDocRef = getUserDoc(firebaseUser.uid);
+
+  try {
+    const existingSnap = await getDoc(userDocRef);
+    const existingData = existingSnap.exists() ? existingSnap.data() : null;
+    const resolvedEmail =
+      firebaseUser.email ||
+      (typeof existingData?.email === "string" ? existingData.email : "");
+
+    const resolvedDisplayName = getEmailDisplayName(
+      resolvedEmail,
+      firebaseUser.displayName ||
+        (typeof existingData?.displayName === "string"
+          ? existingData.displayName
+          : null)
+    );
+
+    const resolvedUsername = getUserName(
+      firebaseUser.displayName ||
+        (typeof existingData?.username === "string"
+          ? existingData.username
+          : null),
+      resolvedDisplayName,
+      resolvedEmail
+    );
+
+    const mergedProfile: UserProfile = {
+      uid: firebaseUser.uid,
+      username: resolvedUsername,
+      displayName: resolvedDisplayName,
+      email: resolvedEmail,
+      photoURL:
+        firebaseUser.photoURL ||
+        (typeof existingData?.photoURL === "string" &&
+        existingData.photoURL.trim()
+          ? existingData.photoURL.trim()
+          : baseProfile.photoURL),
+      badge:
+        typeof existingData?.badge === "string" && existingData.badge.trim()
+          ? existingData.badge.trim()
+          : baseProfile.badge,
+      bio:
+        typeof existingData?.bio === "string" && existingData.bio.trim()
+          ? existingData.bio.trim()
+          : baseProfile.bio,
+      lastLoginAt: baseProfile.lastLoginAt,
+    };
+
+    await setDoc(
+      userDocRef,
+      {
+        uid: mergedProfile.uid,
+        username: mergedProfile.username,
+        displayName: mergedProfile.displayName,
+        email: mergedProfile.email,
+        photoURL: mergedProfile.photoURL,
+        badge: mergedProfile.badge,
+        bio: mergedProfile.bio,
+        lastLoginAt: mergedProfile.lastLoginAt,
+      },
+      { merge: true }
+    );
+
+    return mergedProfile;
+  } catch (error) {
+    console.warn("Firestore 유저 프로필 문서 동기화 경고 (기본 인증 정보 사용):", error);
+    return baseProfile;
+  }
+}
+
+/**
+ * Firestore(경로: users/{uid})에서 유저 정보를 조회합니다.
+ */
+export async function fetchUserProfileFromFirestore(
+  uid: string,
+  fallbackUser?: UserProfile
+): Promise<UserProfile | null> {
+  try {
+    const snap = await getDoc(getUserDoc(uid));
+    if (!snap.exists()) {
+      return fallbackUser ?? null;
+    }
+    const data = snap.data();
+    const resolvedEmail =
+      typeof data.email === "string" && data.email.trim()
+        ? data.email.trim()
+        : fallbackUser?.email || "";
+    const resolvedDisplayName = getEmailDisplayName(
+      resolvedEmail,
+      typeof data.displayName === "string"
+        ? data.displayName
+        : fallbackUser?.displayName
+    );
+    const resolvedUsername = getUserName(
+      typeof data.username === "string" ? data.username : fallbackUser?.username,
+      resolvedDisplayName,
+      resolvedEmail
+    );
+
+    return {
+      uid,
+      username: resolvedUsername,
+      displayName: resolvedDisplayName,
+      email: resolvedEmail,
+      photoURL:
+        typeof data.photoURL === "string" && data.photoURL.trim()
+          ? data.photoURL.trim()
+          : fallbackUser?.photoURL || DEFAULT_PROFILE_DATA.avatarUrl || "/avatar.png",
+      badge:
+        typeof data.badge === "string" && data.badge.trim()
+          ? data.badge.trim()
+          : fallbackUser?.badge || DEFAULT_PROFILE_DATA.badge,
+      bio:
+        typeof data.bio === "string" && data.bio.trim()
+          ? data.bio.trim()
+          : fallbackUser?.bio || DEFAULT_PROFILE_DATA.bio,
+      lastLoginAt:
+        typeof data.lastLoginAt === "string"
+          ? data.lastLoginAt
+          : fallbackUser?.lastLoginAt,
+    };
+  } catch (error) {
+    console.warn("Firestore 유저 프로필 조회 실패:", error);
+    return fallbackUser ?? null;
+  }
 }
 
 /**
@@ -84,11 +325,13 @@ function mapDocToLinkItem(
 }
 
 /**
- * 새로운 링크를 Firestore(경로: users/anonymous/links)에 추가합니다.
+ * 새로운 링크를 Firestore(경로: users/{user.uid}/links)에 추가합니다.
  */
 export async function addLinkToFirestore(
-  linkInput: Omit<LinkItem, "id"> & { id?: string }
+  linkInput: Omit<LinkItem, "id"> & { id?: string },
+  uid?: string
 ): Promise<LinkItem> {
+  const targetUid = resolveTargetUid(uid);
   const createdAt = linkInput.createdAt || new Date().toISOString();
   const trimmedDescription = linkInput.description?.trim();
 
@@ -106,7 +349,7 @@ export async function addLinkToFirestore(
     payload.description = trimmedDescription;
   }
 
-  const docRef = await addDoc(getAnonymousLinksCollection(), payload);
+  const docRef = await addDoc(getUserLinksCollection(targetUid), payload);
 
   return {
     id: docRef.id,
@@ -121,15 +364,17 @@ export async function addLinkToFirestore(
 }
 
 /**
- * 기존 링크를 Firestore(경로: users/anonymous/links/{linkId})에서 수정합니다.
+ * 기존 링크를 Firestore(경로: users/{user.uid}/links/{linkId})에서 수정합니다.
  */
 export async function updateLinkInFirestore(
   linkId: string,
-  linkInput: Omit<LinkItem, "id"> & { id?: string }
+  linkInput: Omit<LinkItem, "id"> & { id?: string },
+  uid?: string
 ): Promise<LinkItem> {
+  const targetUid = resolveTargetUid(uid);
   const createdAt = linkInput.createdAt || new Date().toISOString();
   const trimmedDescription = linkInput.description?.trim();
-  const docRef = getAnonymousLinkDoc(linkId);
+  const docRef = getUserLinkDoc(targetUid, linkId);
 
   const baseFields: Record<string, unknown> = {
     title: linkInput.title.trim(),
@@ -172,10 +417,14 @@ export async function updateLinkInFirestore(
 }
 
 /**
- * 기존 링크를 Firestore(경로: users/anonymous/links/{linkId})에서 삭제합니다.
+ * 기존 링크를 Firestore(경로: users/{user.uid}/links/{linkId})에서 삭제합니다.
  */
-export async function deleteLinkFromFirestore(linkId: string): Promise<void> {
-  const docRef = getAnonymousLinkDoc(linkId);
+export async function deleteLinkFromFirestore(
+  linkId: string,
+  uid?: string
+): Promise<void> {
+  const targetUid = resolveTargetUid(uid);
+  const docRef = getUserLinkDoc(targetUid, linkId);
   await deleteDoc(docRef);
 }
 
@@ -193,16 +442,30 @@ export function sortLinksByCreatedAtDesc(links: LinkItem[]): LinkItem[] {
 }
 
 /**
- * Firestore(경로: users/anonymous/links)에서 저장된 링크 목록을 최신순으로 조회합니다.
+ * Firestore(경로: users/{uid}/links)에서 저장된 개인화 링크 목록을 최신순으로 조회합니다.
  */
-export async function fetchAnonymousLinks(): Promise<LinkItem[]> {
+export async function fetchUserLinks(uid: string): Promise<LinkItem[]> {
+  if (!uid?.trim()) {
+    return [];
+  }
   const q = query(
-    getAnonymousLinksCollection(),
+    getUserLinksCollection(uid.trim()),
     orderBy("createdAt", "desc")
   );
   const snapshot = await getDocs(q);
   const links = snapshot.docs.map(mapDocToLinkItem);
   return sortLinksByCreatedAtDesc(links);
+}
+
+/**
+ * (하위 호환용) 현재 로그인한 사용자의 링크 목록을 조회합니다.
+ */
+export async function fetchAnonymousLinks(): Promise<LinkItem[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    return [];
+  }
+  return fetchUserLinks(uid);
 }
 
 /**

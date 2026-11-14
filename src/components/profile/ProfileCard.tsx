@@ -2,16 +2,20 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { LinkItem } from "@/types";
-import { useProfileStore } from "@/store";
+import { useProfileStore, useAuthStore } from "@/store";
 import { useMounted } from "@/hooks/useMounted";
 import { DEFAULT_PROFILE_DATA, DUMMY_LINKS, INITIAL_LINKS } from "@/data";
 import {
-  fetchAnonymousLinks,
+  fetchUserLinks,
+  getEmailDisplayName,
+  getUserName,
   mergeFirestoreLinks,
 } from "@/lib/links";
 import {
   Card,
   CardHeader,
+  CardTitle,
+  CardDescription,
   CardContent,
   Avatar,
   AvatarImage,
@@ -23,10 +27,19 @@ import {
 import { LinkList } from "./LinkList";
 import { SocialBar } from "./SocialBar";
 import { AddLinkDialog } from "./AddLinkDialog";
-import { Sparkles, Layers, Loader2 } from "lucide-react";
+import { LoginRequiredCard } from "./LoginRequiredCard";
+import {
+  Sparkles,
+  Layers,
+  Loader2,
+  Mail,
+} from "lucide-react";
 
 export function ProfileCard() {
   const isMounted = useMounted();
+  const user = useAuthStore((state) => state.user);
+  const isAuthLoading = useAuthStore((state) => state.isAuthLoading);
+
   const profileState = useProfileStore((state) => state.profile);
   const setStoreLinks = useProfileStore((state) => state.setLinks);
   const addStoreLink = useProfileStore((state) => state.addLink);
@@ -36,57 +49,68 @@ export function ProfileCard() {
   // SSR hydration mismatch 방지: 마운트 전에는 DEFAULT_PROFILE_DATA 사용
   const profile = isMounted ? profileState : DEFAULT_PROFILE_DATA;
 
-  // Firestore(users/anonymous/links)에서 불러온 링크 상태, 로딩/갱신 상태 및 샘플 모드 관리
+  // Firestore(users/{user.uid}/links)에서 불러온 링크 상태, 로딩/갱신 상태 및 샘플 모드 관리
   const [firestoreLinks, setFirestoreLinks] = useState<LinkItem[]>([]);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadedUid, setLoadedUid] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [refreshMessage, setRefreshMessage] = useState<string>(
     "링크 변경 사항을 반영하여 목록을 갱신하는 중입니다..."
   );
   const [isSampleMode, setIsSampleMode] = useState(false);
 
-  // 페이지 로드 시 Firestore(users/anonymous/links)에서 createdAt 최신순으로 링크 조회
+  const currentUid = user?.uid;
+  const isLoading = Boolean(currentUid) && loadedUid !== currentUid;
+
+  // 로그인한 사용자(user.uid) 변경 시 Firestore(users/{user.uid}/links)에서 최신순 링크 조회
   useEffect(() => {
+    if (!currentUid) {
+      return;
+    }
+
     let isMountedEffect = true;
 
-    fetchAnonymousLinks()
+    fetchUserLinks(currentUid)
       .then((fetchedLinks) => {
         if (isMountedEffect) {
           setFirestoreLinks(fetchedLinks);
+          setDeletedIds([]);
         }
       })
       .catch((error) => {
-        console.error("Firestore 링크 목록 초기 조회 실패:", error);
+        console.error("개인화 링크 목록 조회 실패:", error);
       })
       .finally(() => {
         if (isMountedEffect) {
-          setIsLoading(false);
+          setLoadedUid(currentUid);
         }
       });
 
     return () => {
       isMountedEffect = false;
     };
-  }, []);
+  }, [currentUid]);
 
   // Firestore 저장 링크와 기본/샘플 링크를 중복 없이 병합 (createdAt 최신순 정렬)
   const links = useMemo(() => {
+    const scopedFirestoreLinks =
+      currentUid && loadedUid === currentUid ? firestoreLinks : [];
     const baseLinks = (isSampleMode ? DUMMY_LINKS : INITIAL_LINKS).filter(
       (item) => !deletedIds.includes(item.id)
     );
-    const activeFirestoreLinks = firestoreLinks.filter(
+    const activeFirestoreLinks = scopedFirestoreLinks.filter(
       (item) => !deletedIds.includes(item.id)
     );
     return mergeFirestoreLinks(activeFirestoreLinks, baseLinks);
-  }, [firestoreLinks, isSampleMode, deletedIds]);
+  }, [currentUid, loadedUid, firestoreLinks, isSampleMode, deletedIds]);
 
-  // Firestore에서 최신 링크 목록을 다시 불러오는 갱신형 헬퍼
+  // Firestore(users/{user.uid}/links)에서 최신 링크 목록을 다시 불러오는 갱신형 헬퍼
   const refreshLinksFromFirestore = (message: string) => {
+    if (!currentUid) return;
     setRefreshMessage(message);
     setIsRefreshing(true);
     Promise.all([
-      fetchAnonymousLinks(),
+      fetchUserLinks(currentUid),
       new Promise((resolve) => setTimeout(resolve, 250)),
     ])
       .then(([fetchedLinks]) => {
@@ -147,6 +171,51 @@ export function ProfileCard() {
     }
   };
 
+  // 1. 마운트 전 또는 Firebase 인증 상태 확인 중일 때
+  if (!isMounted || isAuthLoading) {
+    return (
+      <Card
+        variant="default"
+        className="relative w-full max-w-[440px] sm:max-w-[460px] md:max-w-[480px] p-8 mx-auto text-center"
+      >
+        <CardContent className="p-0 flex flex-col items-center justify-center gap-3 py-8">
+          <div className="w-14 h-14 rounded-full bg-white border-[2.5px] border-black shadow-[3px_3px_0px_#000000] flex items-center justify-center">
+            <Loader2 className="w-7 h-7 animate-spin text-black stroke-[2.5]" />
+          </div>
+          <p className="text-base font-black text-black">
+            로그인 상태 및 유저 정보를 확인하는 중입니다...
+          </p>
+          <p className="text-xs font-bold text-black/60">
+            잠시만 기다려 주세요.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // 2. 로그인하지 않은 상태일 때: 로그인 이후 사용할 수 있도록 설명 문구 화면 표시
+  if (!user) {
+    return <LoginRequiredCard pageTitle="마이링크 프로필 카드" />;
+  }
+
+  // 3. 로그인 완료 상태일 때: 해당 유저 정보 및 개인화 링크 표시
+  const displayName = getEmailDisplayName(
+    user.email,
+    user.displayName || profile.name
+  );
+  const username = getUserName(
+    user.username,
+    displayName || profile.name,
+    user.email
+  );
+  const displayAvatar = user.photoURL || profile.avatarUrl || "/avatar.png";
+  const displayBadge = user.badge || profile.badge;
+  const displayBio = user.bio || profile.bio;
+  const socials = {
+    ...profile.socials,
+    ...(user.email ? { email: user.email } : {}),
+  };
+
   return (
     <Card
       variant="default"
@@ -176,7 +245,7 @@ export function ProfileCard() {
       </div>
 
       <CardHeader className="p-0 pb-3 flex flex-col items-center">
-        {/* 아바타 (shadcn/ui Avatar, AvatarImage, AvatarFallback 재사용) */}
+        {/* 아바타 (로그인한 유저의 Google 프로필 사진 우선 표시) */}
         <div className="mb-3 sm:mb-4">
           <Avatar
             size="md"
@@ -184,30 +253,49 @@ export function ProfileCard() {
             className="border-[3px] border-black shadow-[4px_4px_0px_#000000]"
           >
             <AvatarImage
-              src={profile.avatarUrl || "/avatar.png"}
-              alt={`${profile.name} 프로필 사진`}
+              src={displayAvatar}
+              alt={`${username} 프로필 사진`}
             />
-            <AvatarFallback>👨‍💻</AvatarFallback>
+            <AvatarFallback>
+              {username.charAt(0).toUpperCase() || "👨‍💻"}
+            </AvatarFallback>
           </Avatar>
         </div>
 
-        {/* 이름 */}
-        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-black">
-          {profile.name}
-        </h1>
+        {/* 로그인한 유저의 username (기존 displayName 자리) */}
+        <CardTitle
+          render={<h1 />}
+          className="text-2xl sm:text-3xl font-black tracking-tight text-black"
+        >
+          {username}
+        </CardTitle>
 
-        {/* 직무 / 역할 뱃지 (shadcn/ui Badge 재사용) */}
-        <div className="mt-2 flex justify-center">
+        {/* 그 아래 @displayName (이메일 앞부분) */}
+        <p className="mt-1 text-xs sm:text-sm font-black text-black/65">
+          @{displayName}
+        </p>
+
+        {/* 유저 이메일 및 직무 / 역할 뱃지 */}
+        <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
           <Badge variant="default" className="text-xs sm:text-sm py-1 px-3">
             <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-            {profile.badge}
+            {displayBadge}
           </Badge>
+          {user.email && (
+            <Badge
+              variant="secondary"
+              className="text-xs py-1 px-2.5 bg-white text-black font-bold gap-1"
+            >
+              <Mail className="w-3 h-3 shrink-0" />
+              <span>{user.email}</span>
+            </Badge>
+          )}
         </div>
 
-        {/* 소개글 (Bio) */}
-        <p className="mt-3.5 text-xs sm:text-sm font-semibold leading-relaxed text-black/90 whitespace-pre-line text-left bg-white/50 p-3 rounded-[8px] border-[1.5px] border-black/20 w-full">
-          {profile.bio}
-        </p>
+        {/* 소개글 (Bio) (@base-ui/react useRender 기반 CardDescription) */}
+        <CardDescription className="mt-3.5 text-xs sm:text-sm font-semibold leading-relaxed text-black/90 whitespace-pre-line text-left bg-white/50 p-3 rounded-[8px] border-[1.5px] border-black/20 w-full">
+          {displayBio}
+        </CardDescription>
       </CardHeader>
 
       <CardContent className="p-0 pt-2 flex flex-col gap-5">
@@ -215,7 +303,7 @@ export function ProfileCard() {
         <div className="flex items-center justify-between gap-2 pt-2 border-t-[2px] border-black/15">
           <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm text-black">
             <Sparkles className="w-4 h-4 text-amber-500" />
-            <span>링크 목록</span>
+            <span>내 링크 목록</span>
             <Badge variant="default" size="sm" className="font-black bg-white">
               {links.length}개
             </Badge>
@@ -234,6 +322,7 @@ export function ProfileCard() {
           <AddLinkDialog
             onAddLink={handleAddLink}
             existingLinks={links}
+            userId={user.uid}
             triggerLabel="새 링크 추가"
             triggerClassName="h-8 px-2.5 text-xs font-black"
           />
@@ -248,18 +337,19 @@ export function ProfileCard() {
             loadingMessage={
               isRefreshing
                 ? refreshMessage
-                : "Firestore에서 최신 링크 목록을 불러오는 중입니다..."
+                : "최신 링크 목록을 불러오는 중입니다..."
             }
             onUpdateLink={handleUpdateLink}
             onDeleteLink={handleDeleteLink}
+            userId={user.uid}
           />
         </div>
 
         {/* 소셜 채널 아이콘 바 & Separator (shadcn/ui Separator 재사용) */}
-        {profile.socials && Object.values(profile.socials).some(Boolean) && (
+        {socials && Object.values(socials).some(Boolean) && (
           <div className="flex flex-col gap-4">
             <Separator className="bg-black/80 h-[2px]" />
-            <SocialBar socials={profile.socials} />
+            <SocialBar socials={socials} />
           </div>
         )}
 

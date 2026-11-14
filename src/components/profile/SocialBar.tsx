@@ -1,5 +1,6 @@
 import React from "react";
 import { SocialLinks } from "@/types";
+import { Button } from "@/components/ui";
 
 interface SocialBarProps {
   socials: SocialLinks;
@@ -122,17 +123,24 @@ export function SocialBar({ socials, className }: SocialBarProps) {
       }`}
     >
       {items.map((item) => (
-        <a
+        <Button
           key={item.key}
-          href={item.url}
-          target={item.key === "email" ? undefined : "_blank"}
-          rel={item.key === "email" ? undefined : "noopener noreferrer"}
-          aria-label={item.label}
-          title={item.label}
-          className={`flex items-center justify-center w-10 h-10 rounded-[8px] text-black border-[2px] border-black shadow-[2px_2px_0px_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_#000000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all ${item.bgClass}`}
+          variant="outline"
+          size="icon"
+          nativeButton={false}
+          render={
+            <a
+              href={item.url}
+              target={item.key === "email" ? undefined : "_blank"}
+              rel={item.key === "email" ? undefined : "noopener noreferrer"}
+              aria-label={item.label}
+              title={item.label}
+            />
+          }
+          className={`w-10 h-10 rounded-[8px] text-black border-[2px] border-black shadow-[2px_2px_0px_#000000] ${item.bgClass}`}
         >
           {item.icon}
-        </a>
+        </Button>
       ))}
     </div>
   );

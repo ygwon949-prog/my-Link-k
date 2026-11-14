@@ -28,3 +28,15 @@ export interface ProfileData {
   tags?: string[];
 }
 
+export interface UserProfile {
+  uid: string;
+  username: string;
+  displayName: string;
+  email: string;
+  photoURL: string;
+  badge?: string;
+  bio?: string;
+  lastLoginAt?: string;
+}
+
+
