@@ -7,6 +7,7 @@ export interface LinkItem {
   category?: string;
   createdAt?: string;
   isPinned?: boolean;
+  clickCount?: number; // 링크 클릭 수 (누적 카운트, Firestore: clickCount)
 }
 
 export interface SocialLinks {

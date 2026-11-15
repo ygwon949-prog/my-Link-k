@@ -331,6 +331,7 @@ export function UserProfileCard({ username }: UserProfileCardProps) {
             links={links}
             showFilter={links.length > 3}
             showActions={isOwner}
+            showClickCount={isOwner}
             emptyMessage={
               isOwner
                 ? "아직 등록된 링크가 없습니다. 우측 상단 [새 링크 추가] 버튼을 눌러 첫 링크를 등록해 보세요!"

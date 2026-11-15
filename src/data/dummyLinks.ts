@@ -27,6 +27,7 @@ export const INITIAL_LINKS: LinkItem[] = [
     description: "개인 오픈소스 프로젝트 및 일일 잔디 커밋 기록",
     category: "개발",
     isPinned: true,
+    clickCount: 142,
     createdAt: "2026-11-09T18:00:00Z",
   },
   {
@@ -37,6 +38,7 @@ export const INITIAL_LINKS: LinkItem[] = [
     description: "Next.js 16 & Neobrutalism 스타일 링크인바이오 프로젝트",
     category: "프로젝트",
     isPinned: true,
+    clickCount: 98,
     createdAt: "2026-11-09T15:00:00Z",
   },
   {
@@ -47,6 +49,7 @@ export const INITIAL_LINKS: LinkItem[] = [
     description: "프론트엔드 최적화 및 최신 웹 표준 기술 탐구 로그",
     category: "블로그",
     isPinned: false,
+    clickCount: 65,
     createdAt: "2026-11-09T12:00:00Z",
   },
   {
@@ -57,6 +60,7 @@ export const INITIAL_LINKS: LinkItem[] = [
     description: "새로운 프로젝트 협업, 외주 및 커피챗 제안 환영",
     category: "연락처",
     isPinned: false,
+    clickCount: 23,
     createdAt: "2026-11-09T09:00:00Z",
   },
 ];
@@ -73,6 +77,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "개인 오픈소스 프로젝트 및 일일 잔디 커밋 기록",
     category: "개발",
     isPinned: true,
+    clickCount: 142,
     createdAt: "2026-11-09T18:00:00Z",
   },
   {
@@ -83,6 +88,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "Next.js 16 & Neobrutalism 스타일 링크인바이오 프로젝트",
     category: "프로젝트",
     isPinned: true,
+    clickCount: 98,
     createdAt: "2026-11-09T15:00:00Z",
   },
   {
@@ -93,6 +99,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "프론트엔드 최적화 및 최신 웹 표준 기술 탐구 로그",
     category: "블로그",
     isPinned: false,
+    clickCount: 65,
     createdAt: "2026-11-09T12:00:00Z",
   },
   {
@@ -103,6 +110,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "새로운 프로젝트 협업, 외주 및 커피챗 제안 환영",
     category: "연락처",
     isPinned: false,
+    clickCount: 23,
     createdAt: "2026-11-09T09:00:00Z",
   },
   {
@@ -113,6 +121,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "React 19 & Framer Motion 기반 인터랙티브 포트폴리오 사이트",
     category: "포트폴리오",
     isPinned: true,
+    clickCount: 84,
     createdAt: "2026-11-08T18:00:00Z",
   },
   {
@@ -123,6 +132,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "업무 경력 사항 및 글로벌 개발자 네트워킹",
     category: "소셜",
     isPinned: false,
+    clickCount: 39,
     createdAt: "2026-11-07T15:00:00Z",
   },
   {
@@ -133,6 +143,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "매주 선별하는 모던 웹 기술 트렌드 및 추천 글 모음",
     category: "블로그",
     isPinned: false,
+    clickCount: 51,
     createdAt: "2026-11-06T15:00:00Z",
   },
   {
@@ -143,6 +154,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "칸반 보드 스타일의 로컬 퍼스트 생산성 관리 툴",
     category: "프로젝트",
     isPinned: false,
+    clickCount: 77,
     createdAt: "2026-11-05T13:10:00Z",
   },
   {
@@ -153,6 +165,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "개발자의 데스크 셋업, 공부 기록 및 일상 사진",
     category: "소셜",
     isPinned: false,
+    clickCount: 18,
     createdAt: "2026-11-04T18:20:00Z",
   },
   {
@@ -163,6 +176,7 @@ export const DUMMY_LINKS: LinkItem[] = [
     description: "shadcn/ui 기반 네오브루탈리즘 테마 컴포넌트 오픈소스 라이브러리",
     category: "개발",
     isPinned: false,
+    clickCount: 112,
     createdAt: "2026-11-03T03:30:00Z",
   },
 ];
@@ -175,7 +189,7 @@ export const DEFAULT_PROFILE_DATA: ProfileData = {
   badge: "Frontend / Web Developer",
   bio: "직관적인 사용자 경험과 클린 코드를 지향하는 웹 개발자입니다. 새로운 기술을 탐구하고, 일상의 가치를 높이는 서비스를 만드는 데 열정을 쏟고 있습니다.",
   avatarUrl: "/avatar.png",
-  links: INITIAL_LINKS,
+  links: [],
   socials: {
     github: "https://github.com/ygwon949-prog",
     instagram: "https://instagram.com/dev_routine",

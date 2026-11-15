@@ -8,6 +8,7 @@ import {
   addLinkToFirestore,
   updateLinkInFirestore,
   deleteLinkFromFirestore,
+  incrementLinkClickCount,
   mergeFirestoreLinks,
   fetchUserProfileFromFirestore,
   fetchUserByUsername,
@@ -173,6 +174,52 @@ export function useDeleteLinkMutation(uid?: string) {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.userLinks(targetUid),
       });
+    },
+  });
+}
+
+/**
+ * 링크 클릭 수를 증가시키고 TanStack Query 캐시에 즉각 낙관적 반영하는 Mutation 훅
+ */
+export function useIncrementClickMutation(uid?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (linkId: string) => {
+      const targetUid = resolveUid(uid);
+      return incrementLinkClickCount(linkId, targetUid);
+    },
+    onMutate: async (linkId: string) => {
+      const targetUid = resolveUid(uid);
+      if (!targetUid) return;
+
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.userLinks(targetUid),
+      });
+
+      const previousLinks = queryClient.getQueryData<LinkItem[]>(
+        queryKeys.userLinks(targetUid)
+      );
+
+      queryClient.setQueryData<LinkItem[]>(
+        queryKeys.userLinks(targetUid),
+        (oldLinks = []) =>
+          oldLinks.map((item) =>
+            item.id === linkId
+              ? { ...item, clickCount: (item.clickCount || 0) + 1 }
+              : item
+          )
+      );
+
+      return { previousLinks, targetUid };
+    },
+    onError: (_err, _linkId, context) => {
+      if (context?.targetUid && context?.previousLinks) {
+        queryClient.setQueryData(
+          queryKeys.userLinks(context.targetUid),
+          context.previousLinks
+        );
+      }
     },
   });
 }

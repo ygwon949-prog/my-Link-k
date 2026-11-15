@@ -8,11 +8,11 @@ import {
   useUserLinksQuery,
   useUserProfileQuery,
 } from "@/hooks/useLinksQuery";
-import { DEFAULT_PROFILE_DATA, DUMMY_LINKS, INITIAL_LINKS } from "@/data";
+import { DEFAULT_PROFILE_DATA } from "@/data";
 import {
   getDisplayName,
   getEmailUsername,
-  mergeFirestoreLinks,
+  sortLinksByCreatedAtDesc,
 } from "@/lib/links";
 import {
   Card,
@@ -34,7 +34,6 @@ import { EditProfileDialog } from "./EditProfileDialog";
 import { LoginRequiredCard } from "./LoginRequiredCard";
 import {
   Sparkles,
-  Layers,
   Loader2,
 } from "lucide-react";
 
@@ -67,21 +66,17 @@ export function ProfileCard() {
   const [refreshMessage, setRefreshMessage] = useState<string>(
     "링크 변경 사항을 반영하여 목록을 갱신하는 중입니다..."
   );
-  const [isSampleMode, setIsSampleMode] = useState(false);
 
   const isLoading = Boolean(currentUid) && isQueryLoading;
 
-  // Firestore 저장 링크와 기본/샘플 링크를 중복 없이 병합 (createdAt 최신순 정렬)
+  // Firebase Firestore에 저장된 개인 링크만 사용 (삭제된 ID 제외 및 createdAt 최신순 정렬)
   const links = useMemo(() => {
-    const scopedFirestoreLinks = currentUid ? firestoreLinks : [];
-    const baseLinks = (isSampleMode ? DUMMY_LINKS : INITIAL_LINKS).filter(
+    if (!currentUid) return [];
+    const activeFirestoreLinks = firestoreLinks.filter(
       (item) => !deletedIds.includes(item.id)
     );
-    const activeFirestoreLinks = scopedFirestoreLinks.filter(
-      (item) => !deletedIds.includes(item.id)
-    );
-    return mergeFirestoreLinks(activeFirestoreLinks, baseLinks);
-  }, [currentUid, firestoreLinks, isSampleMode, deletedIds]);
+    return sortLinksByCreatedAtDesc(activeFirestoreLinks);
+  }, [currentUid, firestoreLinks, deletedIds]);
 
   // 다이얼로그에서 TanStack Query Mutation 완료 후 스토어 동기화
   const handleAddLink = (newLink: LinkItem) => {
@@ -102,17 +97,6 @@ export function ProfileCard() {
       prev.includes(deletedId) ? prev : [...prev, deletedId]
     );
     removeStoreLink(deletedId);
-  };
-
-  // 샘플 데이터 전환 (INITIAL 4개 <-> DUMMY 10개 전체 목록)
-  const handleToggleSampleData = () => {
-    if (isSampleMode) {
-      setStoreLinks(mergeFirestoreLinks(firestoreLinks, INITIAL_LINKS));
-      setIsSampleMode(false);
-    } else {
-      setStoreLinks(mergeFirestoreLinks(firestoreLinks, DUMMY_LINKS));
-      setIsSampleMode(true);
-    }
   };
 
   // 1. 마운트 전 또는 Firebase 인증 상태 확인 중일 때
@@ -173,22 +157,6 @@ export function ProfileCard() {
         <Badge variant="sticker" className="text-[11px] sm:text-xs">
           ✦ OPEN TO WORK
         </Badge>
-      </div>
-
-      {/* 상단 좌측 샘플 데이터 전환 버튼 (shadcn/ui Button 재사용) */}
-      <div className="absolute -top-3.5 -left-2 sm:-left-3 z-10 -rotate-3">
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={handleToggleSampleData}
-          title={
-            isSampleMode ? "기본 링크(4개)로 전환" : "전체 더미 링크(10개) 보기"
-          }
-          className="h-6 px-2 py-0.5 text-[10px] sm:text-[11px] font-black rounded-[6px] border-[2px] shadow-[2px_2px_0px_#000000]"
-        >
-          <Layers className="w-3 h-3 mr-1" />
-          <span>{isSampleMode ? "기본 4개" : "샘플 10개"}</span>
-        </Button>
       </div>
 
       <CardHeader className="p-0 pb-3 flex flex-col items-center">
@@ -277,6 +245,7 @@ export function ProfileCard() {
           <LinkList
             links={links}
             showFilter={links.length > 3}
+            emptyMessage="아직 등록된 링크가 없습니다. 우측 상단 [새 링크 추가] 버튼을 눌러 첫 링크를 등록해 보세요!"
             isLoading={isLoading || isRefreshing}
             loadingMessage={
               isRefreshing

@@ -9,6 +9,7 @@ export interface ProfileState {
   setLinks: (links: LinkItem[]) => void;
   addLink: (link: Omit<LinkItem, "id"> & { id?: string }) => void;
   updateLink: (id: string, updated: Partial<LinkItem>) => void;
+  incrementClickCount: (id: string) => void;
   removeLink: (id: string) => void;
   resetToDefault: () => void;
 }
@@ -31,6 +32,8 @@ export const useProfileStore = create<ProfileState>()(
             ...newLink,
             id: newLink.id || `link-${Date.now()}`,
             createdAt: newLink.createdAt || new Date().toISOString(),
+            clickCount:
+              typeof newLink.clickCount === "number" ? newLink.clickCount : 0,
           };
           return {
             profile: {
@@ -45,6 +48,17 @@ export const useProfileStore = create<ProfileState>()(
             ...state.profile,
             links: state.profile.links.map((link) =>
               link.id === id ? { ...link, ...updated } : link
+            ),
+          },
+        })),
+      incrementClickCount: (id) =>
+        set((state) => ({
+          profile: {
+            ...state.profile,
+            links: state.profile.links.map((link) =>
+              link.id === id
+                ? { ...link, clickCount: (link.clickCount || 0) + 1 }
+                : link
             ),
           },
         })),

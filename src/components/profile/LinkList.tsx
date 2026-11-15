@@ -11,6 +11,7 @@ interface LinkListProps {
   links: LinkItem[];
   showFilter?: boolean;
   showActions?: boolean;
+  showClickCount?: boolean;
   emptyMessage?: string;
   isLoading?: boolean;
   loadingMessage?: string;
@@ -23,6 +24,7 @@ export function LinkList({
   links,
   showFilter = true,
   showActions,
+  showClickCount = true,
   emptyMessage = "아직 등록된 링크가 없습니다.",
   isLoading = false,
   loadingMessage = "링크 목록을 불러오는 중...",
@@ -128,6 +130,7 @@ export function LinkList({
               onUpdateLink={onUpdateLink}
               onDeleteLink={onDeleteLink}
               showActions={showActions}
+              showClickCount={showClickCount}
               userId={userId}
             />
           ))

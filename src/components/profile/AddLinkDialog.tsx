@@ -169,6 +169,7 @@ export function AddLinkDialog({
       currentDescription.trim() || "입력한 한줄 설명이 여기에 표시됩니다.",
     category: currentCategory,
     isPinned: currentIsPinned,
+    clickCount: 0,
   };
 
   return (

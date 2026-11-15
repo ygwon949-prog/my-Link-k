@@ -32,6 +32,7 @@ import {
   LayoutGrid,
   UserPen,
   ExternalLink,
+  BarChart3,
 } from "lucide-react";
 
 function GoogleIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -81,8 +82,15 @@ export default function Header() {
 
   const isProfilePage = pathname === "/";
   const isLinksPage = pathname?.startsWith("/links");
+  const isStatsPage =
+    pathname === "/stats" ||
+    Boolean(pathname?.endsWith("/stats")) ||
+    Boolean(pathname?.endsWith("/states"));
   const username = user ? getEmailUsername(user.email, user.username) : "";
   const personalPagePath = username ? `/${encodeURIComponent(username)}` : "";
+  const statsPagePath = username
+    ? `/${encodeURIComponent(username)}/stats`
+    : "/stats";
   const isPersonalPage = useMemo(() => {
     if (!pathname || !username) return false;
     let decodedPath = pathname;
@@ -398,6 +406,35 @@ export default function Header() {
                           className="px-1.5 py-0 text-[9px] shadow-[1px_1px_0px_#000000]"
                         >
                           현재
+                        </Badge>
+                      )}
+                    </MenuItem>
+
+                    <MenuItem
+                      onClick={() => {
+                        router.push(statsPagePath);
+                      }}
+                      className="justify-between"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <BarChart3 className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>링크 통계 보기</span>
+                      </span>
+                      {isStatsPage ? (
+                        <Badge
+                          variant="secondary"
+                          size="sm"
+                          className="px-1.5 py-0 text-[9px] shadow-[1px_1px_0px_#000000]"
+                        >
+                          현재
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="default"
+                          size="sm"
+                          className="px-1.5 py-0 text-[9px] shadow-[1px_1px_0px_#000000] bg-[#FEF08A] text-black"
+                        >
+                          STATS
                         </Badge>
                       )}
                     </MenuItem>

@@ -12,6 +12,7 @@ import {
   where,
   orderBy,
   writeBatch,
+  increment,
   QueryDocumentSnapshot,
   DocumentData,
 } from "firebase/firestore";
@@ -709,6 +710,13 @@ function mapDocToLinkItem(
     createdAt = new Date().toISOString();
   }
 
+  const clickCount =
+    typeof data.clickCount === "number"
+      ? data.clickCount
+      : typeof data.clicks === "number"
+      ? data.clicks
+      : Number(data.clickCount) || Number(data.clicks) || 0;
+
   return {
     id: docSnap.id,
     title: typeof data.title === "string" ? data.title : "",
@@ -723,6 +731,7 @@ function mapDocToLinkItem(
         ? data.category
         : "개발",
     isPinned: Boolean(data.isPinned),
+    clickCount,
     createdAt,
   };
 }
@@ -737,6 +746,8 @@ export async function addLinkToFirestore(
   const targetUid = resolveTargetUid(uid);
   const createdAt = linkInput.createdAt || new Date().toISOString();
   const trimmedDescription = linkInput.description?.trim();
+  const clickCount =
+    typeof linkInput.clickCount === "number" ? linkInput.clickCount : 0;
 
   // Firestore는 undefined 필드 값을 허용하지 않으므로 유효한 필드만 구성
   const payload: Record<string, unknown> = {
@@ -745,6 +756,7 @@ export async function addLinkToFirestore(
     icon: linkInput.icon?.trim() || "🔗",
     category: linkInput.category || "개발",
     isPinned: Boolean(linkInput.isPinned),
+    clickCount,
     createdAt,
   };
 
@@ -762,6 +774,7 @@ export async function addLinkToFirestore(
     ...(trimmedDescription ? { description: trimmedDescription } : {}),
     category: payload.category as string,
     isPinned: payload.isPinned as boolean,
+    clickCount,
     createdAt,
   };
 }
@@ -778,6 +791,8 @@ export async function updateLinkInFirestore(
   const createdAt = linkInput.createdAt || new Date().toISOString();
   const trimmedDescription = linkInput.description?.trim();
   const docRef = getUserLinkDoc(targetUid, linkId);
+  const clickCount =
+    typeof linkInput.clickCount === "number" ? linkInput.clickCount : 0;
 
   const baseFields: Record<string, unknown> = {
     title: linkInput.title.trim(),
@@ -785,6 +800,7 @@ export async function updateLinkInFirestore(
     icon: linkInput.icon?.trim() || "🔗",
     category: linkInput.category || "개발",
     isPinned: Boolean(linkInput.isPinned),
+    clickCount,
     createdAt,
   };
 
@@ -815,6 +831,7 @@ export async function updateLinkInFirestore(
     ...(trimmedDescription ? { description: trimmedDescription } : {}),
     category: baseFields.category as string,
     isPinned: baseFields.isPinned as boolean,
+    clickCount,
     createdAt,
   };
 }
@@ -829,6 +846,34 @@ export async function deleteLinkFromFirestore(
   const targetUid = resolveTargetUid(uid);
   const docRef = getUserLinkDoc(targetUid, linkId);
   await deleteDoc(docRef);
+}
+
+/**
+ * 링크 클릭 시 Firestore(경로: users/{uid}/links/{linkId})의 clickCount 필드를 원자적으로 1 증가시킵니다.
+ * 비로그인 방문자 또는 로그인 사용자 누구나 대상 링크 소유자(uid)의 링크 클릭 카운트를 업데이트할 수 있습니다.
+ */
+export async function incrementLinkClickCount(
+  linkId: string,
+  uid?: string
+): Promise<number> {
+  const targetUid = uid?.trim() || auth.currentUser?.uid;
+  if (!targetUid || !linkId) {
+    return 0;
+  }
+
+  try {
+    const docRef = getUserLinkDoc(targetUid, linkId);
+    await updateDoc(docRef, {
+      clickCount: increment(1),
+    });
+    return 1;
+  } catch (error) {
+    console.warn(
+      "Firestore 링크 클릭 수(clickCount) 증가 처리 중 경고 (로컬에만 반영):",
+      error
+    );
+    return 0;
+  }
 }
 
 /**

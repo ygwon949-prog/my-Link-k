@@ -127,6 +127,7 @@ export function createLinkItemFromForm(data: AddLinkFormValues): LinkItem {
     description: data.description.trim() || undefined,
     category: data.category,
     isPinned: data.isPinned,
+    clickCount: 0,
     createdAt: new Date().toISOString(),
   };
 }
@@ -146,5 +147,6 @@ export function updateLinkItemFromForm(
     description: data.description.trim() || undefined,
     category: data.category,
     isPinned: data.isPinned,
+    clickCount: existingLink.clickCount ?? 0,
   };
 }

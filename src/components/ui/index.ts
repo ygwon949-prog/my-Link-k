@@ -9,3 +9,4 @@ export * from "./label";
 export * from "./field";
 export * from "./fieldset";
 export * from "./menu";
+export * from "./chart";

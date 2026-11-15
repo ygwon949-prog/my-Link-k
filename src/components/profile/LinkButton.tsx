@@ -13,8 +13,11 @@ import {
   TITLE_MAX_LENGTH,
   DESCRIPTION_MAX_LENGTH,
 } from "@/schemas";
-import { useUpdateLinkMutation } from "@/hooks/useLinksQuery";
-import { useAuthStore } from "@/store";
+import {
+  useUpdateLinkMutation,
+  useIncrementClickMutation,
+} from "@/hooks/useLinksQuery";
+import { useAuthStore, useProfileStore } from "@/store";
 import {
   Field,
   FieldLabel,
@@ -36,6 +39,7 @@ import {
   Loader2,
   Check,
   X,
+  MousePointerClick,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +65,7 @@ export interface LinkButtonProps {
   onUpdateLink?: (updatedLink: LinkItem) => void;
   onDeleteLink?: (deletedId: string) => void;
   showActions?: boolean;
+  showClickCount?: boolean;
   userId?: string;
 }
 
@@ -71,6 +76,7 @@ export function LinkButton({
   onUpdateLink,
   onDeleteLink,
   showActions,
+  showClickCount = true,
   userId,
 }: LinkButtonProps) {
   const isPreview = link.id === "preview";
@@ -79,11 +85,30 @@ export function LinkButton({
   const authUser = useAuthStore((state) => state.user);
   const effectiveUid = userId || authUser?.uid;
   const updateLinkMutation = useUpdateLinkMutation(effectiveUid);
+  const incrementClickMutation = useIncrementClickMutation(effectiveUid);
 
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingCard, setIsDeletingCard] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const handleClickLink = () => {
+    if (isPreview) return;
+
+    // 1. 로컬 Zustand 스토어 즉시 증가 (새로고침/브라우저 재접속 시에도 유지)
+    useProfileStore.getState().incrementClickCount(link.id);
+
+    // 2. 부모 컴포넌트의 콜백 호출 (부모 상태 낙관적 갱신)
+    onUpdateLink?.({
+      ...link,
+      clickCount: (link.clickCount || 0) + 1,
+    });
+
+    // 3. Firestore 원자적 클릭 수(clickCount) 증가 (로그인/비로그인 누구나 대상 링크 소유자 UID로 저장)
+    if (effectiveUid) {
+      incrementClickMutation.mutate(link.id);
+    }
+  };
 
   const defaultValues = useMemo<AddLinkFormValues>(
     () => ({
@@ -532,6 +557,7 @@ export function LinkButton({
           href={link.url}
           target={isMail ? undefined : "_blank"}
           rel={isMail ? undefined : "noopener noreferrer"}
+          onClick={handleClickLink}
           className="flex items-center justify-between gap-2.5 min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black rounded-[6px]"
         >
           <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -541,14 +567,24 @@ export function LinkButton({
             </span>
 
             {/* 링크 제목 및 부가 설명 */}
-            <div className="min-w-0 flex flex-col">
-              <div className="flex items-center gap-1.5">
+            <div className="min-w-0 flex flex-col gap-0.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="truncate tracking-tight font-black text-sm sm:text-base">
                   {link.title}
                 </span>
                 {link.isPinned && (
                   <span className="flex-shrink-0 text-[10px] font-black px-1.5 py-0.2 bg-[#FDE047] text-black border-[1.5px] border-black rounded-[4px] shadow-[1px_1px_0px_#000000]">
                     PIN
+                  </span>
+                )}
+                {/* 누적 클릭 수 배지: 본인인 경우(showClickCount=true)에만 표시 */}
+                {showClickCount && (
+                  <span
+                    className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-black px-1.5 py-0.2 bg-[#E0E7FF] text-black border-[1.5px] border-black rounded-[4px] shadow-[1px_1px_0px_#000000]"
+                    title={`총 ${link.clickCount ?? 0}회 클릭`}
+                  >
+                    <MousePointerClick className="w-3 h-3 text-black/70 stroke-[2.5]" />
+                    <span>{(link.clickCount ?? 0).toLocaleString()}회 클릭</span>
                   </span>
                 )}
               </div>

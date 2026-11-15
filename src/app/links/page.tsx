@@ -6,11 +6,11 @@ import { LinkItem } from "@/types";
 import { useProfileStore, useAuthStore } from "@/store";
 import { useMounted } from "@/hooks/useMounted";
 import { useUserLinksQuery } from "@/hooks/useLinksQuery";
-import { DUMMY_LINKS, LINK_CATEGORIES } from "@/data";
+import { LINK_CATEGORIES } from "@/data";
 import {
   getDisplayName,
   getEmailUsername,
-  mergeFirestoreLinks,
+  sortLinksByCreatedAtDesc,
 } from "@/lib/links";
 import { LinkButton } from "@/components/profile/LinkButton";
 import { AddLinkDialog } from "@/components/profile/AddLinkDialog";
@@ -63,15 +63,13 @@ export default function LinksPage() {
 
   const isLoading = Boolean(currentUid) && isQueryLoading;
 
+  // Firebase Firestore에 저장된 개인 링크만 사용 (삭제된 ID 제외 및 최신순 정렬)
   const links = useMemo(() => {
-    const scopedFirestoreLinks = currentUid ? firestoreLinks : [];
-    const baseLinks = DUMMY_LINKS.filter(
+    if (!currentUid) return [];
+    const activeFirestoreLinks = firestoreLinks.filter(
       (item) => !deletedIds.includes(item.id)
     );
-    const activeFirestoreLinks = scopedFirestoreLinks.filter(
-      (item) => !deletedIds.includes(item.id)
-    );
-    return mergeFirestoreLinks(activeFirestoreLinks, baseLinks);
+    return sortLinksByCreatedAtDesc(activeFirestoreLinks);
   }, [currentUid, firestoreLinks, deletedIds]);
 
   const handleAddLink = (newLink: LinkItem) => {

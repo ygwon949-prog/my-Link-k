@@ -64,14 +64,14 @@ service cloud.firestore {
 
     // ─────────────────────────────────────────────
     // users/{userId}/links/{linkId} 문서 (개인 링크)
-    // 필드: title, url, icon, category, isPinned, createdAt, description(선택)
+    // 필드: title, url, icon, category, isPinned, createdAt, description(선택), clickCount(선택)
     // ─────────────────────────────────────────────
     function isValidLink() {
       let d = request.resource.data;
 
       return d.keys().hasAll(['title', 'url', 'icon', 'category', 'isPinned', 'createdAt'])
              && d.keys().hasOnly([
-               'title', 'url', 'icon', 'description', 'category', 'isPinned', 'createdAt'
+               'title', 'url', 'icon', 'description', 'category', 'isPinned', 'createdAt', 'clickCount'
              ])
              && isStr(d.title, 2, 50)
              // http(s):// 또는 mailto: 만 허용 → <a href>에서의 javascript: XSS 차단
@@ -81,7 +81,16 @@ service cloud.firestore {
              && d.category in ['개발', '프로젝트', '블로그', '포트폴리오', '소셜', '연락처']
              && d.isPinned is bool
              && isStr(d.createdAt, 1, 40)
-             && (!d.keys().hasAny(['description']) || isStr(d.description, 0, 80));
+             && (!d.keys().hasAny(['description']) || isStr(d.description, 0, 80))
+             && (!d.keys().hasAny(['clickCount']) || (d.clickCount is number && d.clickCount >= 0));
+    }
+
+    // 로그인 여부와 관계없이 오직 clickCount 필드만 1 이상 증가시키는 원자적 업데이트 허용
+    function isClickCountIncrement() {
+      let diff = request.resource.data.diff(resource.data);
+      return diff.affectedKeys().hasOnly(['clickCount'])
+             && request.resource.data.clickCount is number
+             && request.resource.data.clickCount >= resource.data.get('clickCount', 0);
     }
 
     // 표시 이름 예약 문서(displayNames/{displayNameLower})가 같은 요청(배치) 안에서
@@ -125,7 +134,10 @@ service cloud.firestore {
       // users/{userId}/links/{linkId}
       match /links/{linkId} {
         allow read: if true;
-        allow create, update: if isOwner(userId) && isValidLink();
+        allow create: if isOwner(userId) && isValidLink();
+        // 본인의 정상 링크 전체 수정 OR 누구나(로그인 여부 무관) clickCount만 증가시키는 수정
+        allow update: if (isOwner(userId) && isValidLink())
+                      || isClickCountIncrement();
         allow delete: if isOwner(userId);
       }
 
