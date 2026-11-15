@@ -3,6 +3,7 @@ import {
   ogSize,
   ogContentType,
 } from "@/lib/og/staticOgImage";
+import { SITE_DOMAIN } from "@/lib/constants";
 
 export const size = ogSize;
 export const contentType = ogContentType;
@@ -16,6 +17,6 @@ export default async function Image() {
     badge: "🛠️ LINK MANAGER",
     badgeColor: "#BAE6FD",
     tags: ["#링크관리", "#소셜모음", "#포트폴리오", "#커스터마이징"],
-    pathname: "mylink.kr/links",
+    pathname: `${SITE_DOMAIN}/links`,
   });
 }

@@ -3,6 +3,7 @@ import {
   ogSize,
   ogContentType,
 } from "@/lib/og/staticOgImage";
+import { SITE_DOMAIN } from "@/lib/constants";
 
 export const size = ogSize;
 export const contentType = ogContentType;
@@ -16,6 +17,6 @@ export default async function Image() {
     badge: "⚡ OFFICIAL",
     badgeColor: "#FEF08A",
     tags: ["#네오브루탈리즘", "#링크인바이오", "#실시간통계", "#3초완성"],
-    pathname: "mylink.kr",
+    pathname: SITE_DOMAIN,
   });
 }

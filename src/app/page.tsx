@@ -11,6 +11,7 @@ import {
   CtaSection,
   Footer,
 } from "@/components/landing";
+import { SITE_URL, SITE_NAME, SITE_KEYWORDS } from "@/lib/constants";
 
 export const metadata: Metadata = {
   title: {
@@ -19,30 +20,27 @@ export const metadata: Metadata = {
   },
   description:
     "지루한 링크트리는 그만! 굵은 테두리와 톡톡 튀는 비비드 컬러, 실시간 클릭 분석까지. Google 계정 하나로 3초 만에 완성하는 나만의 링크 인 바이오.",
-  keywords: [
-    "마이링크",
-    "mylink",
-    "링크트리",
-    "프로필링크",
-    "링크인바이오",
-    "네오브루탈리즘",
-    "멀티링크",
-    "인스타그램 프로필링크",
-    "포트폴리오 링크",
-    "실시간 클릭 통계",
-  ],
+  keywords: SITE_KEYWORDS,
   alternates: {
-    canonical: "/",
+    canonical: SITE_URL,
   },
   openGraph: {
     title:
       "마이링크 (mylink) - 나를 표현하는 가장 힙한 네오브루탈리즘 프로필 링크",
     description:
       "지루한 링크트리는 그만! 굵은 테두리와 톡톡 튀는 비비드 컬러, 실시간 클릭 분석까지. Google 계정 하나로 3초 만에 완성하는 나만의 링크 인 바이오.",
-    url: "/",
-    siteName: "mylink",
+    url: SITE_URL,
+    siteName: SITE_NAME,
     locale: "ko_KR",
     type: "website",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "마이링크 (mylink) - 나를 표현하는 가장 힙한 네오브루탈리즘 프로필 링크",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
@@ -50,6 +48,7 @@ export const metadata: Metadata = {
       "마이링크 (mylink) - 나를 표현하는 가장 힙한 네오브루탈리즘 프로필 링크",
     description:
       "지루한 링크트리는 그만! 굵은 테두리와 톡톡 튀는 비비드 컬러, 실시간 클릭 분석까지. Google 계정 하나로 3초 만에 완성하는 나만의 링크 인 바이오.",
+    images: ["/twitter-image"],
   },
 };
 
@@ -58,8 +57,8 @@ const jsonLd = {
   "@graph": [
     {
       "@type": "WebSite",
-      "@id": "https://mylink.kr/#website",
-      url: "https://mylink.kr",
+      "@id": `${SITE_URL}/#website`,
+      url: SITE_URL,
       name: "mylink",
       description:
         "소중한 링크를 깔끔하게 모으고 관리하는 네오브루탈리즘 프로필 링크 서비스",
@@ -67,8 +66,8 @@ const jsonLd = {
     },
     {
       "@type": "WebApplication",
-      "@id": "https://mylink.kr/#webapp",
-      url: "https://mylink.kr",
+      "@id": `${SITE_URL}/#webapp`,
+      url: SITE_URL,
       name: "마이링크 (mylink)",
       applicationCategory: "UtilitiesApplication",
       operatingSystem: "All",

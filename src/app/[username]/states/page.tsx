@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { UserStatsDashboard } from "@/components/stats/UserStatsDashboard";
 import { normalizeUsernameParam } from "@/lib/links";
+import { SITE_URL } from "@/lib/constants";
 
 interface UserStatesPageProps {
   params: Promise<{ username: string }>;
@@ -24,7 +25,7 @@ export async function generateMetadata({
   }
 
   // states 경로는 stats의 오타/호환 라우트이므로 정식 stats URL로 canonical 지정 및 noindex 처리
-  const canonicalUrl = `/${encodeURIComponent(normalized)}/stats`;
+  const canonicalUrl = `${SITE_URL}/${encodeURIComponent(normalized)}/stats`;
 
   return {
     title: `@${normalized} 링크 클릭 통계 대시보드`,

@@ -2,9 +2,10 @@ import type { MetadataRoute } from "next";
 import { collection, getDocs, limit, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { USERS_COLLECTION } from "@/lib/links";
+import { SITE_URL } from "@/lib/constants";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://mylink.kr";
+  const baseUrl = SITE_URL;
   const now = new Date();
 
   // 기본 정적 사이트맵 (메인 랜딩 페이지)

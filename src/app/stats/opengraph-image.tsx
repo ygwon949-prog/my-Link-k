@@ -3,6 +3,7 @@ import {
   ogSize,
   ogContentType,
 } from "@/lib/og/staticOgImage";
+import { SITE_DOMAIN } from "@/lib/constants";
 
 export const size = ogSize;
 export const contentType = ogContentType;
@@ -16,6 +17,6 @@ export default async function Image() {
     badge: "📊 ANALYTICS",
     badgeColor: "#A7F3D0",
     tags: ["#실시간통계", "#클릭트래킹", "#성과분석", "#데이터시각화"],
-    pathname: "mylink.kr/stats",
+    pathname: `${SITE_DOMAIN}/stats`,
   });
 }

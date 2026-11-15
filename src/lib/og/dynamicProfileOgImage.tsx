@@ -2,6 +2,7 @@ import { ImageResponse } from "next/og";
 import { getOgFont } from "./fonts";
 import { fetchUserByUsername, fetchUserLinks } from "@/lib/links";
 import { DEFAULT_PROFILE_DATA } from "@/data";
+import { SITE_DOMAIN } from "@/lib/constants";
 
 export const ogSize = {
   width: 1200,
@@ -435,7 +436,7 @@ export async function createDynamicProfileOgImage({
               fontWeight: 900,
             }}
           >
-            <span>🔗 mylink.kr/@{username}</span>
+            <span>🔗 {SITE_DOMAIN}/@{username}</span>
           </div>
         </div>
       </div>

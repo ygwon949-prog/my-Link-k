@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { getOgFont } from "./fonts";
+import { SITE_DOMAIN } from "@/lib/constants";
 
 export const ogSize = {
   width: 1200,
@@ -26,7 +27,7 @@ export async function createStaticOgImage({
   badge = "⚡ MYLINK",
   badgeColor = "#A7F3D0",
   tags = ["#네오브루탈리즘", "#링크인바이오", "#실시간통계", "#초간편공유"],
-  pathname = "mylink.kr",
+  pathname = SITE_DOMAIN,
 }: StaticOgOptions): Promise<ImageResponse> {
   const fontData = await getOgFont();
 

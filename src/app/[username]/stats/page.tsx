@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { UserStatsDashboard } from "@/components/stats/UserStatsDashboard";
 import { fetchUserByUsername, normalizeUsernameParam } from "@/lib/links";
+import { SITE_URL, SITE_NAME } from "@/lib/constants";
 
 interface UserStatsPageProps {
   params: Promise<{ username: string }>;
@@ -39,7 +40,9 @@ export async function generateMetadata({
 
   const pageTitle = `@${normalized} 링크 클릭 통계 대시보드`;
   const pageDescription = `${displayName}님의 실시간 링크 클릭 수 및 방문자 반응 통계 대시보드입니다.`;
-  const canonicalUrl = `/${encodeURIComponent(normalized)}/stats`;
+  const canonicalUrl = `${SITE_URL}/${encodeURIComponent(normalized)}/stats`;
+  const ogImageUrl = `/${encodeURIComponent(normalized)}/stats/opengraph-image`;
+  const twitterImageUrl = `/${encodeURIComponent(normalized)}/stats/twitter-image`;
 
   return {
     title: pageTitle,
@@ -48,17 +51,26 @@ export async function generateMetadata({
       canonical: canonicalUrl,
     },
     openGraph: {
-      title: `${pageTitle} | mylink`,
+      title: `${pageTitle} | ${SITE_NAME}`,
       description: pageDescription,
       url: canonicalUrl,
-      siteName: "mylink",
+      siteName: SITE_NAME,
       locale: "ko_KR",
       type: "website",
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: `${pageTitle} | ${SITE_NAME}`,
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
-      title: `${pageTitle} | mylink`,
+      title: `${pageTitle} | ${SITE_NAME}`,
       description: pageDescription,
+      images: [twitterImageUrl],
     },
     robots: userExists
       ? {

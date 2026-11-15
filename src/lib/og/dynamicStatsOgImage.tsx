@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 import { getOgFont } from "./fonts";
 import { fetchUserByUsername, fetchUserLinks } from "@/lib/links";
+import { SITE_DOMAIN } from "@/lib/constants";
 
 export const ogSize = {
   width: 1200,
@@ -375,7 +376,7 @@ export async function createDynamicStatsOgImage({
               fontWeight: 900,
             }}
           >
-            <span>🔗 mylink.kr/@{username}/stats</span>
+            <span>🔗 {SITE_DOMAIN}/@{username}/stats</span>
           </div>
         </div>
       </div>

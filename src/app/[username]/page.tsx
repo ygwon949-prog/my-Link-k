@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { UserProfileCard } from "@/components/profile";
 import { fetchUserByUsername, normalizeUsernameParam } from "@/lib/links";
+import { SITE_URL, SITE_NAME } from "@/lib/constants";
 
 interface UserPageProps {
   params: Promise<{ username: string }>;
@@ -44,7 +45,9 @@ export async function generateMetadata({
   }
 
   const pageTitle = `${displayName} (@${normalized})`;
-  const canonicalUrl = `/${encodeURIComponent(normalized)}`;
+  const canonicalUrl = `${SITE_URL}/${encodeURIComponent(normalized)}`;
+  const ogImageUrl = `/${encodeURIComponent(normalized)}/opengraph-image`;
+  const twitterImageUrl = `/${encodeURIComponent(normalized)}/twitter-image`;
 
   return {
     title: pageTitle,
@@ -64,14 +67,23 @@ export async function generateMetadata({
       title: pageTitle,
       description: bio,
       url: canonicalUrl,
-      siteName: "mylink",
+      siteName: SITE_NAME,
       locale: "ko_KR",
       type: "profile",
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: `${displayName}님의 마이링크 프로필`,
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
       title: pageTitle,
       description: bio,
+      images: [twitterImageUrl],
     },
     robots: userExists
       ? {

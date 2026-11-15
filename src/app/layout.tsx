@@ -3,6 +3,14 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import { QueryProvider } from "@/components/providers/QueryProvider";
+import {
+  SITE_URL,
+  SITE_NAME,
+  SITE_TITLE_DEFAULT,
+  SITE_TITLE_TEMPLATE,
+  SITE_DESCRIPTION,
+  SITE_KEYWORDS,
+} from "@/lib/constants";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,29 +23,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL || "https://mylink.kr"
-  ),
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: "마이링크 (mylink) - 나만의 힙한 네오브루탈리즘 프로필 링크",
-    template: "%s | mylink",
+    default: SITE_TITLE_DEFAULT,
+    template: SITE_TITLE_TEMPLATE,
   },
-  description:
-    "소중한 링크를 깔끔하게 모으고 관리하는 네오브루탈리즘 프로필 링크 서비스입니다. 3초 만에 나만의 감각적인 링크 인 바이오를 완성해보세요.",
-  keywords: [
-    "마이링크",
-    "mylink",
-    "프로필링크",
-    "링크트리",
-    "링크 인 바이오",
-    "네오브루탈리즘",
-    "링크모음",
-    "포트폴리오 링크",
-    "인스타 링크",
-    "소셜 링크",
-    "실시간 클릭 분석",
-  ],
-  authors: [{ name: "mylink", url: "https://mylink.kr" }],
+  description: SITE_DESCRIPTION,
+  keywords: SITE_KEYWORDS,
+  authors: [{ name: "mylink", url: SITE_URL }],
   creator: "mylink",
   publisher: "mylink",
   formatDetection: {
@@ -46,22 +39,29 @@ export const metadata: Metadata = {
     telephone: false,
   },
   alternates: {
-    canonical: "/",
+    canonical: SITE_URL,
   },
   openGraph: {
     type: "website",
     locale: "ko_KR",
-    url: "/",
-    siteName: "mylink",
-    title: "마이링크 (mylink) - 나만의 힙한 네오브루탈리즘 프로필 링크",
-    description:
-      "지루한 링크트리는 그만! 굵은 테두리와 톡톡 튀는 비비드 컬러, 실시간 클릭 분석까지 지원하는 나만의 링크 인 바이오.",
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    title: SITE_TITLE_DEFAULT,
+    description: SITE_DESCRIPTION,
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: SITE_TITLE_DEFAULT,
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "마이링크 (mylink) - 나만의 힙한 네오브루탈리즘 프로필 링크",
-    description:
-      "지루한 링크트리는 그만! 굵은 테두리와 톡톡 튀는 비비드 컬러, 실시간 클릭 분석까지 지원하는 나만의 링크 인 바이오.",
+    title: SITE_TITLE_DEFAULT,
+    description: SITE_DESCRIPTION,
+    images: ["/twitter-image"],
   },
   robots: {
     index: true,
@@ -76,6 +76,12 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: "/favicon.ico",
+  },
+  verification: {
+    google: "googlee34a2c840ea2c28e.html",
+    other: {
+      "naver-site-verification": "a05e7c903f8acae753bc4837cceb8ebd",
+    },
   },
   category: "technology",
   other: {
