@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL || "https://mylink.kr"
+  ),
   title: "mylink - 나만의 링크 관리",
   description: "소중한 링크를 깔끔하게 모으고 관리하는 mylink 서비스입니다.",
   openGraph: {
