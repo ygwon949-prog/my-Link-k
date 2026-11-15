@@ -153,7 +153,7 @@ export default function Header() {
                   : "text-black"
               }`}
             >
-              프로필
+              홈
             </Button>
 
             <Button
