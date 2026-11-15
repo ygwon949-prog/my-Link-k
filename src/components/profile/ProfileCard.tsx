@@ -36,7 +36,6 @@ import {
   Sparkles,
   Layers,
   Loader2,
-  Mail,
 } from "lucide-react";
 
 export function ProfileCard() {
@@ -229,21 +228,12 @@ export function ProfileCard() {
           />
         </div>
 
-        {/* 유저 이메일 및 직무 / 역할 뱃지 */}
+        {/* 직무 / 역할 뱃지 */}
         <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
           <Badge variant="default" className="text-xs sm:text-sm py-1 px-3">
             <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
             {displayBadge}
           </Badge>
-          {user.email && (
-            <Badge
-              variant="secondary"
-              className="text-xs py-1 px-2.5 bg-white text-black font-bold gap-1"
-            >
-              <Mail className="w-3 h-3 shrink-0" />
-              <span>{user.email}</span>
-            </Badge>
-          )}
         </div>
 
         {/* 소개글 (Bio) (@base-ui/react useRender 기반 CardDescription) */}

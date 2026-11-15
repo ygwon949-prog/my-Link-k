@@ -10,8 +10,9 @@ import {
   deleteLinkFromFirestore,
   mergeFirestoreLinks,
   fetchUserProfileFromFirestore,
+  fetchUserByUsername,
+  normalizeUsernameParam,
   updateUserProfileInFirestore,
-  checkDisplayNameDuplicate,
   getEmailUsername,
   UpdateUserProfileInput,
 } from "@/lib/links";
@@ -21,6 +22,8 @@ import { useAuthStore, useProfileStore } from "@/store";
 export const queryKeys = {
   userLinks: (uid: string) => ["users", uid, "links"] as const,
   userProfile: (uid: string) => ["users", uid, "profile"] as const,
+  userByUsername: (username: string) =>
+    ["users", "by-username", normalizeUsernameParam(username).toLowerCase()] as const,
 };
 
 function resolveUid(uid?: string | null): string {
@@ -55,6 +58,24 @@ export function useUserProfileQuery(
       fetchUserProfileFromFirestore(targetUid, fallbackUser ?? undefined),
     enabled: Boolean(targetUid),
     initialData: fallbackUser ?? undefined,
+  });
+}
+
+/**
+ * username으로 사용자를 검색하는 TanStack Query 훅
+ */
+export function useUserByUsernameQuery(
+  username?: string | null,
+  initialUser?: UserProfile | null
+) {
+  const normalizedUsername = normalizeUsernameParam(username);
+
+  return useQuery<UserProfile | null>({
+    queryKey: queryKeys.userByUsername(normalizedUsername),
+    queryFn: () => fetchUserByUsername(normalizedUsername),
+    enabled: Boolean(normalizedUsername),
+    initialData: initialUser ?? undefined,
+    retry: false,
   });
 }
 
@@ -156,18 +177,6 @@ export function useDeleteLinkMutation(uid?: string) {
   });
 }
 
-/**
- * 표시 이름(displayName) 중복 여부를 단발성으로 확인하는 Mutation 훅
- */
-export function useCheckDisplayNameDuplicateMutation(uid?: string) {
-  return useMutation({
-    mutationFn: (displayName: string) => {
-      const targetUid = resolveUid(uid);
-      return checkDisplayNameDuplicate(displayName, targetUid || undefined);
-    },
-  });
-}
-
 export interface OptimisticProfileContext {
   targetUid: string;
   previousQueryProfile: UserProfile | null | undefined;
@@ -216,7 +225,11 @@ export function useUpdateProfileMutation(uid?: string) {
         resolvedEmail,
         baseUser?.username
       );
-      const nextDisplayName = newProfileInput.displayName.trim();
+      // 표시 이름은 수정 불가이므로 기존 값을 그대로 유지
+      const lockedDisplayName =
+        baseUser?.displayName ||
+        previousLocalProfile.name ||
+        DEFAULT_PROFILE_DATA.name;
       const nextBadge =
         newProfileInput.badge.trim() || DEFAULT_PROFILE_DATA.badge;
       const nextBio = newProfileInput.bio.trim() || DEFAULT_PROFILE_DATA.bio;
@@ -230,7 +243,7 @@ export function useUpdateProfileMutation(uid?: string) {
         const optimisticProfile: UserProfile = {
           uid: targetUid,
           username: resolvedUsername,
-          displayName: nextDisplayName,
+          displayName: lockedDisplayName,
           googleDisplayName:
             baseUser?.googleDisplayName ||
             auth.currentUser?.displayName ||
@@ -255,7 +268,7 @@ export function useUpdateProfileMutation(uid?: string) {
 
       // 로컬 프로필 스토어 즉시 업데이트
       useProfileStore.getState().updateProfile({
-        name: nextDisplayName,
+        name: lockedDisplayName,
         badge: nextBadge,
         bio: nextBio,
         avatarUrl: nextPhotoURL,
@@ -295,6 +308,12 @@ export function useUpdateProfileMutation(uid?: string) {
         queryKeys.userProfile(updatedProfile.uid),
         updatedProfile
       );
+      if (updatedProfile.username) {
+        queryClient.setQueryData(
+          queryKeys.userByUsername(updatedProfile.username),
+          updatedProfile
+        );
+      }
       useAuthStore.getState().updateUserProfile(updatedProfile);
       useProfileStore.getState().updateProfile({
         name: updatedProfile.displayName,
@@ -305,10 +324,15 @@ export function useUpdateProfileMutation(uid?: string) {
     },
 
     // 4. 완료 후 서버 상태와 최종 정합성 보장
-    onSettled: (_data, _error, _variables, context) => {
+    onSettled: (data, _error, _variables, context) => {
       if (context?.targetUid) {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.userProfile(context.targetUid),
+        });
+      }
+      if (data?.username) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.userByUsername(data.username),
         });
       }
     },

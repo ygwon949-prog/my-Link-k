@@ -1,0 +1,158 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────
+    // 공통 헬퍼 함수
+    // ─────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // 로그인 + 요청자 UID가 경로의 {userId}와 일치
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isStr(value, minLen, maxLen) {
+      return value is string && value.size() >= minLen && value.size() <= maxLen;
+    }
+
+    // ─────────────────────────────────────────────
+    // users/{userId} 문서 (프로필 정보)
+    // 필드: uid, username, displayName, displayNameLower, googleDisplayName,
+    //       email, photoURL, badge, bio, lastLoginAt, updatedAt(선택)
+    // 로그인 동기화(syncUserProfileToFirestore)와
+    // 프로필 편집(updateUserProfileInFirestore)이 모두 이 검증을 통과해야 합니다.
+    // ─────────────────────────────────────────────
+    function isValidUserProfile(userId) {
+      let d = request.resource.data;
+      let tokenEmail = request.auth.token.email;
+
+      return d.keys().hasAll([
+               'uid', 'username', 'displayName', 'displayNameLower',
+               'googleDisplayName', 'email', 'photoURL', 'badge', 'bio',
+               'lastLoginAt'
+             ])
+             && d.keys().hasOnly([
+               'uid', 'username', 'displayName', 'displayNameLower',
+               'googleDisplayName', 'email', 'photoURL', 'badge', 'bio',
+               'lastLoginAt', 'updatedAt'
+             ])
+             // 신원 필드 위조 방지: uid / email / username(이메일 앞부분)은 토큰 값과 일치해야 함
+             // → 다른 사람의 username(/{username} 주소)을 가로챌 수 없음
+             && d.uid == userId
+             && request.auth.token.email_verified == true
+             && tokenEmail is string
+             && d.email == tokenEmail
+             && d.username == tokenEmail.split('@')[0]
+             // 표시 이름: 최초 생성 후 수정 불가(users 규칙에서 강제).
+             // 로그인 시 Google 원본 이름이 그대로 저장되므로 길이는 여유 있게 1~100자
+             && isStr(d.displayName, 1, 100)
+             && d.displayNameLower == d.displayName.lower()
+             && isStr(d.googleDisplayName, 0, 100)
+             // 직무 뱃지 / 소개글 (클라이언트 스키마와 동일한 상한)
+             && isStr(d.badge, 1, 40)
+             && isStr(d.bio, 1, 160)
+             // 프로필 이미지: 내부 경로('/avatar.png') 또는 http(s) URL만 허용 (javascript: 등 차단)
+             && isStr(d.photoURL, 1, 2048)
+             && d.photoURL.matches('^(https?://[^ ]+|/[^/ ][^ ]*)$')
+             && isStr(d.lastLoginAt, 1, 40)
+             && (!d.keys().hasAny(['updatedAt']) || isStr(d.updatedAt, 1, 40));
+    }
+
+    // ─────────────────────────────────────────────
+    // users/{userId}/links/{linkId} 문서 (개인 링크)
+    // 필드: title, url, icon, category, isPinned, createdAt, description(선택)
+    // ─────────────────────────────────────────────
+    function isValidLink() {
+      let d = request.resource.data;
+
+      return d.keys().hasAll(['title', 'url', 'icon', 'category', 'isPinned', 'createdAt'])
+             && d.keys().hasOnly([
+               'title', 'url', 'icon', 'description', 'category', 'isPinned', 'createdAt'
+             ])
+             && isStr(d.title, 2, 50)
+             // http(s):// 또는 mailto: 만 허용 → <a href>에서의 javascript: XSS 차단
+             && isStr(d.url, 1, 2048)
+             && d.url.matches('^(https?://|mailto:)[^ ]+$')
+             && isStr(d.icon, 1, 16)
+             && d.category in ['개발', '프로젝트', '블로그', '포트폴리오', '소셜', '연락처']
+             && d.isPinned is bool
+             && isStr(d.createdAt, 1, 40)
+             && (!d.keys().hasAny(['description']) || isStr(d.description, 0, 80));
+    }
+
+    // 표시 이름 예약 문서(displayNames/{displayNameLower})가 같은 요청(배치) 안에서
+    // 본인 UID로 만들어지는지 확인 → 문서 ID가 유일하므로 표시 이름 중복이 서버에서 차단됩니다.
+    function reservesOwnDisplayName(userId) {
+      let key = request.resource.data.displayNameLower;
+      let reservationPath = /databases/$(database)/documents/displayNames/$(key);
+      return existsAfter(reservationPath)
+             && getAfter(reservationPath).data.uid == userId;
+    }
+
+    // 예약 문서 ID로 쓸 수 있는 표시 이름인지 확인 (최초 생성 시에만 검사)
+    function hasReservableDisplayName() {
+      let d = request.resource.data;
+      return !d.displayName.matches('.*/.*')
+             && d.displayNameLower != '.'
+             && d.displayNameLower != '..'
+             && !d.displayNameLower.matches('^__.*__$');
+    }
+
+    match /users/{userId} {
+      // 읽기: 누구나 (개인 페이지 /{username} 조회, username 검색)
+      allow read: if true;
+
+      // 최초 생성: 로그인 + 본인 UID + 필드 검증 + 표시 이름 예약(중복 검사)을 함께 요구
+      allow create: if isOwner(userId)
+                    && isValidUserProfile(userId)
+                    && hasReservableDisplayName()
+                    && reservesOwnDisplayName(userId);
+
+      // 수정: 로그인 + 본인 UID + 필드 검증 + 표시 이름(displayName) 변경 불가
+      // (로그인 동기화 / 프로필 편집은 displayName을 그대로 유지한 채 저장)
+      allow update: if isOwner(userId)
+                    && isValidUserProfile(userId)
+                    && request.resource.data.displayName == resource.data.displayName;
+
+      // 계정/프로필 삭제 기능은 아직 없으므로 차단
+      // (추후 구현 시 `if isOwner(userId)` 로 변경)
+      allow delete: if false;
+
+      // users/{userId}/links/{linkId}
+      match /links/{linkId} {
+        allow read: if true;
+        allow create, update: if isOwner(userId) && isValidLink();
+        allow delete: if isOwner(userId);
+      }
+
+      // users/{userId}/profile/{docId}
+      // ※ 현재 앱은 프로필을 users/{userId} 문서에 직접 저장하므로 사용하지 않는 경로입니다.
+      //   향후 하위 컬렉션으로 분리할 경우를 대비한 규칙입니다.
+      match /profile/{docId} {
+        allow read: if true;
+        allow create, update: if isOwner(userId) && request.resource.data.size() <= 20;
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // displayNames/{displayNameLower} -> { uid }
+    // 표시 이름 유일성 보장용 예약 컬렉션.
+    //  - 이미 존재하는 문서는 create가 거부되므로 같은 이름을 두 번 예약할 수 없음
+    //  - 수정/삭제 불가 → 표시 이름 변경 불가 정책과 일치
+    match /displayNames/{nameKey} {
+      allow get: if true;
+      allow create: if isSignedIn()
+                    && request.resource.data.keys().hasOnly(['uid'])
+                    && request.resource.data.uid == request.auth.uid
+                    && existsAfter(/databases/$(database)/documents/users/$(request.auth.uid))
+                    && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayNameLower == nameKey;
+      allow update, delete: if false;
+    }
+
+    // 그 외 모든 경로는 명시적 허용이 없으므로 자동 차단(기본 거부)됩니다.
+  }
+}

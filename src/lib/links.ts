@@ -9,7 +9,9 @@ import {
   getDoc,
   getDocs,
   query,
+  where,
   orderBy,
+  writeBatch,
   QueryDocumentSnapshot,
   DocumentData,
 } from "firebase/firestore";
@@ -22,6 +24,10 @@ import { DEFAULT_PROFILE_DATA } from "@/data";
  * 사용자별 개인화 링크 저장용 Firestore 컬렉션 경로: users/{user.uid}/links
  */
 export const USERS_COLLECTION = "users";
+/**
+ * 표시 이름 유일성 보장용 예약 컬렉션: displayNames/{소문자 표시 이름} -> { uid }
+ */
+export const DISPLAY_NAMES_COLLECTION = "displayNames";
 export const ANONYMOUS_USER_ID = "anonymous";
 export const LINKS_SUBCOLLECTION = "links";
 export const ANONYMOUS_LINKS_PATH = `${USERS_COLLECTION}/${ANONYMOUS_USER_ID}/${LINKS_SUBCOLLECTION}`;
@@ -188,6 +194,10 @@ export function buildUserProfileFromAuth(firebaseUser: User): UserProfile {
 /**
  * 로그인한 사용자의 프로필 정보를 Firestore(경로: users/{user.uid})에 동기화하고
  * 해당 경로에 저장된 최신 유저 정보를 반환합니다.
+ *
+ * - 최초 로그인: Google 이름을 기본 표시 이름으로 사용하되, 이미 사용 중이면 숫자를 붙여
+ *   중복되지 않게 정하고 displayNames/{이름} 예약 문서와 함께 원자적으로 생성합니다.
+ * - 재로그인: 표시 이름(displayName)은 수정 불가이므로 기존 값을 그대로 유지합니다.
  */
 export async function syncUserProfileToFirestore(
   firebaseUser: User
@@ -219,23 +229,11 @@ export async function syncUserProfileToFirestore(
       typeof existingData?.displayName === "string"
         ? existingData.displayName.trim()
         : "";
-    const hasCustomUpdate = Boolean(existingData?.updatedAt);
 
-    // 이전 버전에서 displayName에 이메일 앞부분이 자동 저장된 레거시 문서인 경우 Google 이름으로 보정
-    const isLegacyEmailPrefixDisplayName =
-      !hasCustomUpdate &&
-      existingDisplayName === resolvedUsername &&
-      Boolean(googleDisplayName) &&
-      googleDisplayName !== resolvedUsername;
-
-    const resolvedDisplayName = isLegacyEmailPrefixDisplayName
-      ? googleDisplayName
-      : getDisplayName(existingDisplayName, googleDisplayName, resolvedEmail);
-
-    const mergedProfile: UserProfile = {
+    const buildMergedProfile = (displayName: string): UserProfile => ({
       uid: firebaseUser.uid,
       username: resolvedUsername,
-      displayName: resolvedDisplayName,
+      displayName,
       googleDisplayName,
       email: resolvedEmail,
       photoURL:
@@ -255,26 +253,81 @@ export async function syncUserProfileToFirestore(
       ...(typeof existingData?.updatedAt === "string"
         ? { updatedAt: existingData.updatedAt }
         : {}),
-    };
+    });
 
-    await setDoc(
-      userDocRef,
-      {
-        uid: mergedProfile.uid,
-        username: mergedProfile.username,
-        displayName: mergedProfile.displayName,
-        displayNameLower: mergedProfile.displayName.toLowerCase(),
-        googleDisplayName: mergedProfile.googleDisplayName,
-        email: mergedProfile.email,
-        photoURL: mergedProfile.photoURL,
-        badge: mergedProfile.badge,
-        bio: mergedProfile.bio,
-        lastLoginAt: mergedProfile.lastLoginAt,
-      },
-      { merge: true }
-    );
+    const toDocPayload = (profile: UserProfile) => ({
+      uid: profile.uid,
+      username: profile.username,
+      displayName: profile.displayName,
+      displayNameLower: getDisplayNameKey(profile.displayName),
+      googleDisplayName: profile.googleDisplayName,
+      email: profile.email,
+      photoURL: profile.photoURL,
+      badge: profile.badge,
+      bio: profile.bio,
+      lastLoginAt: profile.lastLoginAt,
+    });
 
-    return mergedProfile;
+    // ── 재로그인: 표시 이름 유지 (수정 불가) ──
+    if (existingSnap.exists() && existingDisplayName) {
+      const mergedProfile = buildMergedProfile(existingDisplayName);
+
+      // 문서 ID로 쓸 수 없는 레거시 이름('/' 등)은 예약 없이 프로필만 동기화
+      if (!isReservableDisplayName(existingDisplayName)) {
+        await setDoc(userDocRef, toDocPayload(mergedProfile), { merge: true });
+        return mergedProfile;
+      }
+
+      const reservationRef = getDisplayNameReservationRef(existingDisplayName);
+      const reservationSnap = await getDoc(reservationRef);
+
+      // 예약 문서가 없는 기존 사용자(마이그레이션)는 예약을 보강하되,
+      // 다른 사용자가 이미 같은 이름을 예약한 경우에는 건너뜁니다.
+      if (!reservationSnap.exists()) {
+        try {
+          const batch = writeBatch(db);
+          batch.set(userDocRef, toDocPayload(mergedProfile), { merge: true });
+          batch.set(reservationRef, { uid: firebaseUser.uid });
+          await batch.commit();
+          return mergedProfile;
+        } catch (error) {
+          console.warn("표시 이름 예약 보강 실패 (프로필만 동기화):", error);
+        }
+      }
+
+      await setDoc(userDocRef, toDocPayload(mergedProfile), { merge: true });
+      return mergedProfile;
+    }
+
+    // ── 최초 로그인: 중복되지 않는 표시 이름 결정 후 예약 문서와 함께 원자적으로 생성 ──
+    const baseName = sanitizeDisplayName(googleDisplayName, resolvedUsername);
+    let startIndex = 1;
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const { name, index } = await findAvailableDisplayName(
+        baseName,
+        firebaseUser.uid,
+        startIndex
+      );
+      const mergedProfile = buildMergedProfile(name);
+
+      try {
+        const batch = writeBatch(db);
+        batch.set(userDocRef, toDocPayload(mergedProfile), { merge: true });
+        batch.set(getDisplayNameReservationRef(name), {
+          uid: firebaseUser.uid,
+        });
+        await batch.commit();
+        return mergedProfile;
+      } catch (error) {
+        // 동시 가입 등으로 같은 이름이 먼저 예약된 경우 다음 후보로 재시도
+        lastError = error;
+        startIndex = index + 1;
+      }
+    }
+
+    throw lastError ?? new Error("표시 이름을 확정하지 못했습니다.");
   } catch (error) {
     console.warn(
       "Firestore 유저 프로필 문서 동기화 경고 (기본 인증 정보 사용):",
@@ -282,6 +335,80 @@ export async function syncUserProfileToFirestore(
     );
     return baseProfile;
   }
+}
+
+/**
+ * URL 파라미터 등으로 전달된 username 문자열을 정규화합니다.
+ * (URL 디코딩, 공백 제거, 선행 '@' 기호 제거)
+ */
+export function normalizeUsernameParam(rawUsername?: string | null): string {
+  if (!rawUsername) return "";
+  let decoded = rawUsername;
+  try {
+    decoded = decodeURIComponent(rawUsername);
+  } catch {
+    decoded = rawUsername;
+  }
+  return decoded.trim().replace(/^@+/, "").trim();
+}
+
+/**
+ * Firestore users/{uid} 문서 데이터를 UserProfile 객체로 변환합니다.
+ */
+function mapDocToUserProfile(
+  uid: string,
+  data: DocumentData,
+  fallbackUser?: UserProfile
+): UserProfile {
+  const resolvedEmail =
+    typeof data.email === "string" && data.email.trim()
+      ? data.email.trim()
+      : fallbackUser?.email || "";
+  const resolvedUsername = getEmailUsername(
+    resolvedEmail,
+    typeof data.username === "string" ? data.username : fallbackUser?.username
+  );
+  const googleDisplayName =
+    typeof data.googleDisplayName === "string" && data.googleDisplayName.trim()
+      ? data.googleDisplayName.trim()
+      : fallbackUser?.googleDisplayName || resolvedUsername;
+  const resolvedDisplayName = getDisplayName(
+    typeof data.displayName === "string"
+      ? data.displayName
+      : fallbackUser?.displayName,
+    googleDisplayName,
+    resolvedEmail
+  );
+
+  return {
+    uid,
+    username: resolvedUsername,
+    displayName: resolvedDisplayName,
+    googleDisplayName,
+    email: resolvedEmail,
+    photoURL:
+      typeof data.photoURL === "string" && data.photoURL.trim()
+        ? data.photoURL.trim()
+        : fallbackUser?.photoURL ||
+          DEFAULT_PROFILE_DATA.avatarUrl ||
+          "/avatar.png",
+    badge:
+      typeof data.badge === "string" && data.badge.trim()
+        ? data.badge.trim()
+        : fallbackUser?.badge || DEFAULT_PROFILE_DATA.badge,
+    bio:
+      typeof data.bio === "string" && data.bio.trim()
+        ? data.bio.trim()
+        : fallbackUser?.bio || DEFAULT_PROFILE_DATA.bio,
+    lastLoginAt:
+      typeof data.lastLoginAt === "string"
+        ? data.lastLoginAt
+        : fallbackUser?.lastLoginAt,
+    updatedAt:
+      typeof data.updatedAt === "string"
+        ? data.updatedAt
+        : fallbackUser?.updatedAt,
+  };
 }
 
 /**
@@ -296,59 +423,7 @@ export async function fetchUserProfileFromFirestore(
     if (!snap.exists()) {
       return fallbackUser ?? null;
     }
-    const data = snap.data();
-    const resolvedEmail =
-      typeof data.email === "string" && data.email.trim()
-        ? data.email.trim()
-        : fallbackUser?.email || "";
-    const resolvedUsername = getEmailUsername(
-      resolvedEmail,
-      typeof data.username === "string"
-        ? data.username
-        : fallbackUser?.username
-    );
-    const googleDisplayName =
-      typeof data.googleDisplayName === "string" &&
-      data.googleDisplayName.trim()
-        ? data.googleDisplayName.trim()
-        : fallbackUser?.googleDisplayName || resolvedUsername;
-    const resolvedDisplayName = getDisplayName(
-      typeof data.displayName === "string"
-        ? data.displayName
-        : fallbackUser?.displayName,
-      googleDisplayName,
-      resolvedEmail
-    );
-
-    return {
-      uid,
-      username: resolvedUsername,
-      displayName: resolvedDisplayName,
-      googleDisplayName,
-      email: resolvedEmail,
-      photoURL:
-        typeof data.photoURL === "string" && data.photoURL.trim()
-          ? data.photoURL.trim()
-          : fallbackUser?.photoURL ||
-            DEFAULT_PROFILE_DATA.avatarUrl ||
-            "/avatar.png",
-      badge:
-        typeof data.badge === "string" && data.badge.trim()
-          ? data.badge.trim()
-          : fallbackUser?.badge || DEFAULT_PROFILE_DATA.badge,
-      bio:
-        typeof data.bio === "string" && data.bio.trim()
-          ? data.bio.trim()
-          : fallbackUser?.bio || DEFAULT_PROFILE_DATA.bio,
-      lastLoginAt:
-        typeof data.lastLoginAt === "string"
-          ? data.lastLoginAt
-          : fallbackUser?.lastLoginAt,
-      updatedAt:
-        typeof data.updatedAt === "string"
-          ? data.updatedAt
-          : fallbackUser?.updatedAt,
-    };
+    return mapDocToUserProfile(uid, snap.data(), fallbackUser);
   } catch (error) {
     console.warn("Firestore 유저 프로필 조회 실패:", error);
     return fallbackUser ?? null;
@@ -356,87 +431,199 @@ export async function fetchUserProfileFromFirestore(
 }
 
 /**
- * Firestore의 users 컬렉션에서 다른 사용자가 동일한 displayName을 사용 중인지 중복 여부를 확인합니다.
+ * Firestore(컬렉션: users)에서 username으로 유저를 검색하여 반환합니다.
+ * 일치하는 유저가 없으면 null을 반환합니다.
+ */
+export async function fetchUserByUsername(
+  username: string
+): Promise<UserProfile | null> {
+  const normalized = normalizeUsernameParam(username);
+  if (!normalized) {
+    return null;
+  }
+
+  const normalizedLower = normalized.toLowerCase();
+  const usersCol = collection(db, USERS_COLLECTION);
+
+  // 1차: username 필드 정확 일치 쿼리
+  const exactQuery = query(usersCol, where("username", "==", normalized));
+  const exactSnap = await getDocs(exactQuery);
+  if (!exactSnap.empty) {
+    const docSnap = exactSnap.docs[0];
+    return mapDocToUserProfile(docSnap.id, docSnap.data());
+  }
+
+  // 2차: 소문자 username 필드 일치 쿼리
+  if (normalizedLower !== normalized) {
+    const lowerQuery = query(
+      usersCol,
+      where("username", "==", normalizedLower)
+    );
+    const lowerSnap = await getDocs(lowerQuery);
+    if (!lowerSnap.empty) {
+      const docSnap = lowerSnap.docs[0];
+      return mapDocToUserProfile(docSnap.id, docSnap.data());
+    }
+  }
+
+  // 3차: 대소문자 구분 없는 username 또는 이메일 앞부분 매칭 확인
+  const allSnap = await getDocs(usersCol);
+  for (const docSnap of allSnap.docs) {
+    const data = docSnap.data();
+    const docUsername =
+      typeof data.username === "string" ? data.username.trim().toLowerCase() : "";
+    const emailPrefix = getEmailUsername(
+      typeof data.email === "string" ? data.email : null,
+      typeof data.username === "string" ? data.username : null
+    ).toLowerCase();
+
+    if (docUsername === normalizedLower || emailPrefix === normalizedLower) {
+      return mapDocToUserProfile(docSnap.id, data);
+    }
+  }
+
+  // 현재 로그인한 사용자의 username과 일치하는 경우 동기화 후 반환
+  const currentUser = auth.currentUser;
+  if (currentUser) {
+    const currentUsername = getEmailUsername(currentUser.email).toLowerCase();
+    if (currentUsername === normalizedLower) {
+      return syncUserProfileToFirestore(currentUser);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 표시 이름을 Firestore 문서 ID(displayNames/{key})로 쓸 수 있는 형태로 정리합니다.
+ * - 문서 ID에 쓸 수 없는 '/' 치환, 공백 정리, 최대 100자
+ * - '.', '..', '__x__' 형태(문서 ID 예약어) 회피
+ */
+export function sanitizeDisplayName(
+  rawName?: string | null,
+  fallbackName = "user"
+): string {
+  let name = (rawName ?? "").replace(/\//g, "-").trim().slice(0, 100).trim();
+  if (!name) {
+    name = fallbackName.replace(/\//g, "-").trim() || "user";
+  }
+  if (/^\.{1,2}$/.test(name) || /^__.*__$/.test(name.toLowerCase())) {
+    name = `user ${name}`;
+  }
+  return name;
+}
+
+/**
+ * 표시 이름 예약 문서 키 (대소문자 구분 없는 유일성 보장용). users/{uid}.displayNameLower 와 동일해야 합니다.
+ */
+export function getDisplayNameKey(displayName: string): string {
+  return displayName.trim().toLowerCase();
+}
+
+/**
+ * 표시 이름을 예약 문서 ID(displayNames/{key})로 쓸 수 있는지 확인합니다.
+ */
+function isReservableDisplayName(displayName: string): boolean {
+  const key = getDisplayNameKey(displayName);
+  return (
+    key.length > 0 &&
+    key.length <= 100 &&
+    !key.includes("/") &&
+    !/^\.{1,2}$/.test(key) &&
+    !/^__.*__$/.test(key)
+  );
+}
+
+function getDisplayNameReservationRef(displayName: string) {
+  return doc(db, DISPLAY_NAMES_COLLECTION, getDisplayNameKey(displayName));
+}
+
+/**
+ * 표시 이름 예약 문서(displayNames/{이름})를 조회하여 다른 사용자가 이미 사용 중인지 확인합니다.
  * @param displayName 확인할 표시 이름
- * @param excludeUid 중복 검사에서 제외할 현재 로그인 사용자의 UID
+ * @param excludeUid 본인 UID (본인이 예약한 이름은 중복으로 보지 않음)
  * @returns 중복이면 true, 사용 가능하면 false
  */
 export async function checkDisplayNameDuplicate(
   displayName: string,
   excludeUid?: string
 ): Promise<boolean> {
-  const trimmed = displayName.trim();
-  if (!trimmed) {
+  const sanitized = sanitizeDisplayName(displayName, "");
+  if (!displayName.trim() || !sanitized) {
     return false;
   }
 
-  const normalizedTarget = trimmed.toLowerCase();
   const currentUid = excludeUid?.trim() || auth.currentUser?.uid;
-
-  const usersCol = collection(db, USERS_COLLECTION);
-  const snapshot = await getDocs(usersCol);
-
-  for (const docSnap of snapshot.docs) {
-    if (currentUid && docSnap.id === currentUid) {
-      continue;
-    }
-
-    const data = docSnap.data();
-    const docDisplayNameLower =
-      typeof data.displayNameLower === "string"
-        ? data.displayNameLower.trim().toLowerCase()
-        : "";
-    const docDisplayName =
-      typeof data.displayName === "string"
-        ? data.displayName.trim().toLowerCase()
-        : "";
-
-    if (
-      docDisplayNameLower === normalizedTarget ||
-      docDisplayName === normalizedTarget
-    ) {
-      return true;
-    }
+  const snap = await getDoc(getDisplayNameReservationRef(sanitized));
+  if (!snap.exists()) {
+    return false;
   }
-
-  return false;
+  const ownerUid = snap.data()?.uid;
+  return !(currentUid && ownerUid === currentUid);
 }
 
+/**
+ * 중복되지 않는 표시 이름을 찾습니다. 이미 사용 중이면 뒤에 숫자(2, 3, ...)를 붙입니다.
+ */
+async function findAvailableDisplayName(
+  baseName: string,
+  uid: string,
+  startIndex = 1
+): Promise<{ name: string; index: number }> {
+  const MAX_TRIES = 50;
+  for (let index = startIndex; index < startIndex + MAX_TRIES; index += 1) {
+    const suffix = index === 1 ? "" : String(index);
+    const candidate = sanitizeDisplayName(
+      `${baseName.slice(0, 100 - suffix.length)}${suffix}`
+    );
+    if (!(await checkDisplayNameDuplicate(candidate, uid))) {
+      return { name: candidate, index };
+    }
+  }
+  // 극단적으로 충돌이 많은 경우 랜덤 접미사로 확정
+  const random = Math.random().toString(36).slice(2, 8);
+  return {
+    name: sanitizeDisplayName(`${baseName.slice(0, 90)}-${random}`),
+    index: startIndex + MAX_TRIES,
+  };
+}
+
+/**
+ * 표시 이름(displayName)은 최초 생성 이후 수정할 수 없으므로 입력에 포함하지 않습니다.
+ */
 export interface UpdateUserProfileInput {
-  displayName: string;
   badge: string;
   bio: string;
   photoURL?: string;
 }
 
 /**
- * 사용자의 프로필 정보(displayName, badge, bio, photoURL)를 Firestore(users/{uid})에 수정 저장합니다.
- * username은 이메일 앞부분으로 유지되며, displayName 중복 여부를 저장 전 검증합니다.
+ * 사용자의 프로필 정보(badge, bio, photoURL)를 Firestore(users/{uid})에 수정 저장합니다.
+ * username(이메일 앞부분)과 displayName은 변경되지 않습니다.
  */
 export async function updateUserProfileInFirestore(
   input: UpdateUserProfileInput,
   uid?: string
 ): Promise<UserProfile> {
   const targetUid = resolveTargetUid(uid);
-  const trimmedDisplayName = input.displayName.trim();
   const trimmedBadge = input.badge.trim() || DEFAULT_PROFILE_DATA.badge;
   const trimmedBio = input.bio.trim() || DEFAULT_PROFILE_DATA.bio;
   const trimmedPhotoURL = input.photoURL?.trim();
 
-  // 저장 전 displayName 중복 여부 재검증
-  const isDuplicate = await checkDisplayNameDuplicate(
-    trimmedDisplayName,
-    targetUid
-  );
-  if (isDuplicate) {
-    throw new Error(
-      "이미 다른 사용자가 사용 중인 표시 이름(Display Name)입니다. 다른 이름을 입력해주세요."
-    );
-  }
-
   const userDocRef = getUserDoc(targetUid);
   const existingSnap = await getDoc(userDocRef);
   const existingData = existingSnap.exists() ? existingSnap.data() : null;
+
+  // 표시 이름은 기존 값을 그대로 유지 (수정 불가)
+  const lockedDisplayName =
+    typeof existingData?.displayName === "string"
+      ? existingData.displayName.trim()
+      : "";
+  if (!existingData || !lockedDisplayName) {
+    throw new Error(
+      "프로필 문서를 찾을 수 없습니다. 로그아웃 후 다시 로그인해주세요."
+    );
+  }
 
   const currentUser = auth.currentUser;
   const resolvedEmail =
@@ -466,7 +653,7 @@ export async function updateUserProfileInFirestore(
   const updatedProfile: UserProfile = {
     uid: targetUid,
     username: resolvedUsername,
-    displayName: trimmedDisplayName,
+    displayName: lockedDisplayName,
     googleDisplayName,
     email: resolvedEmail,
     photoURL: resolvedPhotoURL,
@@ -485,7 +672,7 @@ export async function updateUserProfileInFirestore(
       uid: updatedProfile.uid,
       username: updatedProfile.username,
       displayName: updatedProfile.displayName,
-      displayNameLower: updatedProfile.displayName.toLowerCase(),
+      displayNameLower: getDisplayNameKey(updatedProfile.displayName),
       googleDisplayName: updatedProfile.googleDisplayName,
       email: updatedProfile.email,
       photoURL: updatedProfile.photoURL,
@@ -661,16 +848,28 @@ export function sortLinksByCreatedAtDesc(links: LinkItem[]): LinkItem[] {
  * Firestore(경로: users/{uid}/links)에서 저장된 개인화 링크 목록을 최신순으로 조회합니다.
  */
 export async function fetchUserLinks(uid: string): Promise<LinkItem[]> {
-  if (!uid?.trim()) {
+  const targetUid = uid?.trim();
+  if (!targetUid) {
     return [];
   }
-  const q = query(
-    getUserLinksCollection(uid.trim()),
-    orderBy("createdAt", "desc")
-  );
-  const snapshot = await getDocs(q);
-  const links = snapshot.docs.map(mapDocToLinkItem);
-  return sortLinksByCreatedAtDesc(links);
+  const linksCol = getUserLinksCollection(targetUid);
+  try {
+    const q = query(linksCol, orderBy("createdAt", "desc"));
+    const [orderedSnap, allSnap] = await Promise.all([
+      getDocs(q),
+      getDocs(linksCol),
+    ]);
+    const sourceDocs =
+      allSnap.docs.length >= orderedSnap.docs.length
+        ? allSnap.docs
+        : orderedSnap.docs;
+    const links = sourceDocs.map(mapDocToLinkItem);
+    return sortLinksByCreatedAtDesc(links);
+  } catch {
+    const snapshot = await getDocs(linksCol);
+    const links = snapshot.docs.map(mapDocToLinkItem);
+    return sortLinksByCreatedAtDesc(links);
+  }
 }
 
 /**

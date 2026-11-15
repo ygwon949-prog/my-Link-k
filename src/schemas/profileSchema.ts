@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { isValidUrlOrMailto } from "./linkSchema";
 
-export const DISPLAY_NAME_MIN_LENGTH = 2;
-export const DISPLAY_NAME_MAX_LENGTH = 20;
+// 표시 이름(displayName)은 최초 생성 후 수정할 수 없으므로 편집 스키마에 포함하지 않습니다.
 export const BADGE_MIN_LENGTH = 2;
 export const BADGE_MAX_LENGTH = 40;
 export const BIO_MIN_LENGTH = 2;
@@ -20,16 +19,6 @@ export function isValidAvatarUrl(rawUrl: string): boolean {
 }
 
 export const editProfileSchema = z.object({
-  displayName: z
-    .string()
-    .trim()
-    .min(1, { message: "표시 이름(Display Name)을 입력해주세요." })
-    .min(DISPLAY_NAME_MIN_LENGTH, {
-      message: `표시 이름은 최소 ${DISPLAY_NAME_MIN_LENGTH}자 이상 입력해주세요.`,
-    })
-    .max(DISPLAY_NAME_MAX_LENGTH, {
-      message: `표시 이름은 최대 ${DISPLAY_NAME_MAX_LENGTH}자 이내로 입력해주세요.`,
-    }),
   badge: z
     .string()
     .trim()

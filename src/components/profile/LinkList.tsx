@@ -10,6 +10,8 @@ import { Search, Loader2 } from "lucide-react";
 interface LinkListProps {
   links: LinkItem[];
   showFilter?: boolean;
+  showActions?: boolean;
+  emptyMessage?: string;
   isLoading?: boolean;
   loadingMessage?: string;
   onUpdateLink?: (updatedLink: LinkItem) => void;
@@ -20,6 +22,8 @@ interface LinkListProps {
 export function LinkList({
   links,
   showFilter = true,
+  showActions,
+  emptyMessage = "아직 등록된 링크가 없습니다.",
   isLoading = false,
   loadingMessage = "링크 목록을 불러오는 중...",
   onUpdateLink,
@@ -123,13 +127,16 @@ export function LinkList({
               existingLinks={links}
               onUpdateLink={onUpdateLink}
               onDeleteLink={onDeleteLink}
+              showActions={showActions}
               userId={userId}
             />
           ))
         ) : (
           <div className="py-8 px-4 text-center bg-white/70 border-[2px] border-dashed border-black/40 rounded-[10px]">
             <p className="text-sm font-black text-black/70">
-              검색 조건에 맞는 링크가 없습니다.
+              {links.length === 0
+                ? emptyMessage
+                : "검색 조건에 맞는 링크가 없습니다."}
             </p>
             {(selectedCategory !== "전체" || searchQuery) && (
               <Button

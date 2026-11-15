@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store";
@@ -31,6 +31,7 @@ import {
   User,
   LayoutGrid,
   UserPen,
+  ExternalLink,
 } from "lucide-react";
 
 function GoogleIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -81,6 +82,22 @@ export default function Header() {
   const isProfilePage = pathname === "/";
   const isLinksPage = pathname?.startsWith("/links");
   const username = user ? getEmailUsername(user.email, user.username) : "";
+  const personalPagePath = username ? `/${encodeURIComponent(username)}` : "";
+  const isPersonalPage = useMemo(() => {
+    if (!pathname || !username) return false;
+    let decodedPath = pathname;
+    try {
+      decodedPath = decodeURIComponent(pathname);
+    } catch {
+      decodedPath = pathname;
+    }
+    const cleanSegment = decodedPath
+      .replace(/^\/+/, "")
+      .replace(/^@+/, "")
+      .toLowerCase();
+    return cleanSegment === username.toLowerCase();
+  }, [pathname, username]);
+
   const displayName = user
     ? getDisplayName(user.displayName, user.googleDisplayName, user.email)
     : "";
@@ -88,8 +105,10 @@ export default function Header() {
   const handleCopyProfileUrl = async () => {
     if (typeof window === "undefined") return;
     try {
-      const originUrl = window.location.origin;
-      await navigator.clipboard.writeText(originUrl);
+      const targetUrl = personalPagePath
+        ? `${window.location.origin}${personalPagePath}`
+        : window.location.origin;
+      await navigator.clipboard.writeText(targetUrl);
       setIsCopied(true);
       setTimeout(() => {
         setIsCopied(false);
@@ -138,6 +157,25 @@ export default function Header() {
             >
               전체 링크
             </Button>
+
+            {isMounted && !isAuthLoading && user && personalPagePath && (
+              <Button
+                variant={isPersonalPage ? "accent" : "outline"}
+                size="sm"
+                nativeButton={false}
+                render={<Link href={personalPagePath} />}
+                className={`h-8 px-2.5 text-xs sm:text-sm font-black rounded-[6px] border-[1.5px] border-black shadow-[1.5px_1.5px_0px_#000000] gap-1 ${
+                  isPersonalPage
+                    ? "bg-[#A7F3D0] text-black"
+                    : "bg-white hover:bg-[#A7F3D0]/60 text-black"
+                }`}
+              >
+                <span>개인 페이지</span>
+                <span className="hidden md:inline text-[11px] font-extrabold text-black/70">
+                  (@{username})
+                </span>
+              </Button>
+            )}
           </nav>
         </div>
 
@@ -290,6 +328,37 @@ export default function Header() {
                         {isCopied ? "COPIED" : "공유"}
                       </Badge>
                     </MenuItem>
+
+                    {personalPagePath && (
+                      <MenuItem
+                        onClick={() => {
+                          router.push(personalPagePath);
+                        }}
+                        className="justify-between"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>개인 페이지로 이동</span>
+                        </span>
+                        {isPersonalPage ? (
+                          <Badge
+                            variant="accent"
+                            size="sm"
+                            className="px-1.5 py-0 text-[9px] shadow-[1px_1px_0px_#000000]"
+                          >
+                            현재
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="default"
+                            size="sm"
+                            className="px-1.5 py-0 text-[9px] shadow-[1px_1px_0px_#000000]"
+                          >
+                            /{username}
+                          </Badge>
+                        )}
+                      </MenuItem>
+                    )}
 
                     <MenuItem
                       onClick={() => {
