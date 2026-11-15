@@ -21,6 +21,7 @@ export interface AuthState {
   initAuthListener: () => () => void;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  updateUserProfile: (updated: Partial<UserProfile>) => void;
   clearAuthError: () => void;
 }
 
@@ -158,6 +159,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isLoggingOut: false });
     }
   },
+
+  updateUserProfile: (updated) =>
+    set((state) => ({
+      user: state.user ? { ...state.user, ...updated } : null,
+    })),
 
   clearAuthError: () => set({ authError: null }),
 }));

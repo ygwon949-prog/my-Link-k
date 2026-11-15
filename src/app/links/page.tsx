@@ -8,8 +8,8 @@ import { useMounted } from "@/hooks/useMounted";
 import { DUMMY_LINKS, LINK_CATEGORIES } from "@/data";
 import {
   fetchUserLinks,
-  getEmailDisplayName,
-  getUserName,
+  getDisplayName,
+  getEmailUsername,
   mergeFirestoreLinks,
 } from "@/lib/links";
 import { LinkButton } from "@/components/profile/LinkButton";
@@ -213,8 +213,12 @@ export default function LinksPage() {
     );
   }
 
-  const displayName = getEmailDisplayName(user.email, user.displayName);
-  const username = getUserName(user.username, displayName, user.email);
+  const username = getEmailUsername(user.email, user.username);
+  const displayName = getDisplayName(
+    user.displayName,
+    user.googleDisplayName,
+    user.email
+  );
 
   return (
     <main className="relative flex-1 p-4 sm:p-6 md:p-8 bg-[#FFFBEB] dark:bg-zinc-950 min-h-[calc(100vh-64px)]">
@@ -258,7 +262,7 @@ export default function LinksPage() {
                   <span>ALL LINKS DIRECTORY</span>
                 </Badge>
                 <CardTitle className="text-2xl sm:text-3xl">
-                  {username}님의 링크 모아보기
+                  {displayName}님의 링크 모아보기
                 </CardTitle>
                 <CardDescription className="mt-1 text-black/80 font-bold">
                   개발 프로젝트, 기술 블로그, 포트폴리오 등 개인화된 링크 모음입니다.
@@ -282,18 +286,18 @@ export default function LinksPage() {
                 >
                   <AvatarImage
                     src={user.photoURL}
-                    alt={`${username} 프로필`}
+                    alt={`${displayName} 프로필`}
                   />
                   <AvatarFallback className="text-xs">
-                    {username.charAt(0).toUpperCase() || "👤"}
+                    {displayName.charAt(0).toUpperCase() || "👤"}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col min-w-0">
                   <span className="text-xs font-black text-black truncate">
-                    {username}
+                    {displayName}
                   </span>
                   <span className="text-[11px] font-bold text-black/65 truncate">
-                    @{displayName}
+                    @{username}
                   </span>
                 </div>
               </div>

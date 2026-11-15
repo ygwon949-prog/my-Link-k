@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store";
 import { useMounted } from "@/hooks/useMounted";
-import { getEmailDisplayName, getUserName } from "@/lib/links";
+import { getDisplayName, getEmailUsername } from "@/lib/links";
+import { EditProfileDialog } from "@/components/profile/EditProfileDialog";
 import {
   Avatar,
   AvatarImage,
@@ -29,6 +30,7 @@ import {
   Check,
   User,
   LayoutGrid,
+  UserPen,
 } from "lucide-react";
 
 function GoogleIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -59,6 +61,7 @@ export default function Header() {
   const router = useRouter();
   const isMounted = useMounted();
   const [isCopied, setIsCopied] = useState(false);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
 
   const user = useAuthStore((state) => state.user);
   const isAuthLoading = useAuthStore((state) => state.isAuthLoading);
@@ -77,11 +80,9 @@ export default function Header() {
 
   const isProfilePage = pathname === "/";
   const isLinksPage = pathname?.startsWith("/links");
+  const username = user ? getEmailUsername(user.email, user.username) : "";
   const displayName = user
-    ? getEmailDisplayName(user.email, user.displayName)
-    : "";
-  const username = user
-    ? getUserName(user.username, displayName, user.email)
+    ? getDisplayName(user.displayName, user.googleDisplayName, user.email)
     : "";
 
   const handleCopyProfileUrl = async () => {
@@ -163,8 +164,8 @@ export default function Header() {
                       size="sm"
                       title={
                         user.email
-                          ? `${username} (@${displayName} · ${user.email})`
-                          : `${username} (@${displayName})`
+                          ? `${displayName} (@${username} · ${user.email})`
+                          : `${displayName} (@${username})`
                       }
                       className="h-9 px-2 sm:px-2.5 bg-[#FFFBEB] hover:bg-[#FEF08A] text-black border-[2px] border-black shadow-[2px_2px_0px_#000000] gap-2 min-w-0"
                     />
@@ -176,18 +177,18 @@ export default function Header() {
                   >
                     <AvatarImage
                       src={user.photoURL}
-                      alt={`${username} 프로필`}
+                      alt={`${displayName} 프로필`}
                     />
                     <AvatarFallback className="text-xs">
-                      {username.charAt(0).toUpperCase() || "👤"}
+                      {displayName.charAt(0).toUpperCase() || "👤"}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col min-w-0 text-left leading-tight">
                     <span className="text-xs font-black text-black truncate max-w-[85px] sm:max-w-[130px]">
-                      {username}
+                      {displayName}
                     </span>
                     <span className="text-[10px] font-bold text-black/65 truncate max-w-[95px] sm:max-w-[140px]">
-                      @{displayName}
+                      @{username}
                     </span>
                   </div>
                   <ChevronDown className="w-3.5 h-3.5 text-black/70 shrink-0" />
@@ -213,18 +214,18 @@ export default function Header() {
                       >
                         <AvatarImage
                           src={user.photoURL}
-                          alt={`${username} 프로필`}
+                          alt={`${displayName} 프로필`}
                         />
                         <AvatarFallback className="text-xs">
-                          {username.charAt(0).toUpperCase() || "👤"}
+                          {displayName.charAt(0).toUpperCase() || "👤"}
                         </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0 flex-1 flex flex-col">
                         <p className="text-xs sm:text-sm font-black text-black truncate">
-                          {username}
+                          {displayName}
                         </p>
                         <p className="text-[11px] font-extrabold text-black/75 truncate">
-                          @{displayName}
+                          @{username}
                         </p>
                         {user.email && (
                           <p className="text-[10px] font-semibold text-black/60 truncate mt-0.5">
@@ -237,11 +238,30 @@ export default function Header() {
 
                   <MenuSeparator />
 
-                  {/* 2. 빠른 액션 메뉴 (내 페이지 URL 복사 · 프로필/전체 링크 이동) */}
+                  {/* 2. 빠른 액션 메뉴 (프로필 수정 · 내 페이지 URL 복사 · 프로필/전체 링크 이동) */}
                   <MenuGroup>
                     <MenuGroupLabel className="text-black/70">
                       빠른 액션 메뉴
                     </MenuGroupLabel>
+
+                    <MenuItem
+                      onClick={() => {
+                        setIsEditProfileOpen(true);
+                      }}
+                      className="justify-between"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <UserPen className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>프로필 수정하기</span>
+                      </span>
+                      <Badge
+                        variant="secondary"
+                        size="sm"
+                        className="px-1.5 py-0 text-[9px] shadow-[1px_1px_0px_#000000]"
+                      >
+                        EDIT
+                      </Badge>
+                    </MenuItem>
 
                     <MenuItem
                       closeOnClick={false}
@@ -329,6 +349,12 @@ export default function Header() {
                   </MenuItem>
                 </MenuContent>
               </Menu>
+
+              {/* 헤더 메뉴에서 열리는 프로필 수정 다이얼로그 */}
+              <EditProfileDialog
+                open={isEditProfileOpen}
+                onOpenChange={setIsEditProfileOpen}
+              />
 
               {/* 빠른 로그아웃 버튼 (@base-ui/react Button) */}
               <Button

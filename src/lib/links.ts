@@ -89,50 +89,85 @@ function resolveTargetUid(uid?: string): string {
 }
 
 /**
- * 이메일 주소에서 '@' 앞부분을 추출하여 반환합니다 (displayName 용도).
+ * 이메일 주소에서 '@' 앞부분을 추출하여 반환합니다 (username 용도).
  */
-export function getEmailDisplayName(
+export function getEmailUsername(
   email?: string | null,
-  fallbackName?: string | null
+  fallbackUsername?: string | null
 ): string {
   const emailPrefix = email ? email.split("@")[0]?.trim() : "";
   if (emailPrefix) {
     return emailPrefix;
   }
-  return fallbackName?.trim() || DEFAULT_PROFILE_DATA.name;
+  return fallbackUsername?.trim() || "user";
 }
 
 /**
- * 사용자의 표시용 이름(username)을 반환합니다.
- * Google 로그인 시 전달되는 이름(authDisplayName)을 최우선으로 사용합니다.
+ * (하위 호환용) 이메일 주소에서 '@' 앞부분을 추출하여 반환합니다.
+ */
+export function getEmailDisplayName(
+  email?: string | null,
+  fallbackName?: string | null
+): string {
+  return getEmailUsername(email, fallbackName);
+}
+
+/**
+ * 사용자의 아이디(username)를 반환합니다.
+ * 항상 이메일의 '@' 앞부분을 최우선으로 사용합니다.
  */
 export function getUserName(
-  username?: string | null,
-  fallbackDisplayName?: string | null,
+  email?: string | null,
+  fallbackUsername?: string | null
+): string {
+  return getEmailUsername(email, fallbackUsername);
+}
+
+/**
+ * 사용자의 표시용 이름(displayName)을 반환합니다.
+ * 사용자가 설정/수정한 displayName이 있으면 우선 사용하고,
+ * 없으면 Google 로그인 시 전달되는 이름(googleDisplayName)을 기본값으로 사용합니다.
+ */
+export function getDisplayName(
+  displayName?: string | null,
+  googleDisplayName?: string | null,
   email?: string | null
 ): string {
-  if (username?.trim()) {
-    return username.trim();
+  if (displayName?.trim()) {
+    return displayName.trim();
   }
-  if (fallbackDisplayName?.trim()) {
-    return fallbackDisplayName.trim();
+  if (googleDisplayName?.trim()) {
+    return googleDisplayName.trim();
   }
-  return getEmailDisplayName(email);
+  return getEmailUsername(email, DEFAULT_PROFILE_DATA.name);
+}
+
+/**
+ * Firebase Auth User 객체에서 Google 프로바이더 원본 이름을 추출합니다.
+ */
+export function extractGoogleAuthName(firebaseUser?: User | null): string {
+  if (!firebaseUser) return "";
+  const googleProvider = firebaseUser.providerData?.find(
+    (p) => p.providerId === "google.com"
+  );
+  if (googleProvider?.displayName?.trim()) {
+    return googleProvider.displayName.trim();
+  }
+  return firebaseUser.displayName?.trim() || "";
 }
 
 /**
  * Firebase Auth의 User 객체로부터 기본 UserProfile 객체를 생성합니다.
- * - username: 로그인 시 Google 계정에서 나오는 이름(firebaseUser.displayName)
- * - displayName: 이메일의 앞부분('@' 이전 문자열)
+ * - username: 이메일의 앞부분('@' 이전 문자열)
+ * - displayName: 로그인 시 Google 계정에서 나오는 이름(googleDisplayName) 기본값
  */
 export function buildUserProfileFromAuth(firebaseUser: User): UserProfile {
-  const displayName = getEmailDisplayName(
-    firebaseUser.email,
-    firebaseUser.displayName
-  );
-  const username = getUserName(
-    firebaseUser.displayName,
-    displayName,
+  const username = getEmailUsername(firebaseUser.email);
+  const googleDisplayName =
+    extractGoogleAuthName(firebaseUser) || username || DEFAULT_PROFILE_DATA.name;
+  const displayName = getDisplayName(
+    googleDisplayName,
+    googleDisplayName,
     firebaseUser.email
   );
 
@@ -140,6 +175,7 @@ export function buildUserProfileFromAuth(firebaseUser: User): UserProfile {
     uid: firebaseUser.uid,
     username,
     displayName,
+    googleDisplayName,
     email: firebaseUser.email || "",
     photoURL:
       firebaseUser.photoURL || DEFAULT_PROFILE_DATA.avatarUrl || "/avatar.png",
@@ -166,34 +202,47 @@ export async function syncUserProfileToFirestore(
       firebaseUser.email ||
       (typeof existingData?.email === "string" ? existingData.email : "");
 
-    const resolvedDisplayName = getEmailDisplayName(
+    // username은 항상 이메일 앞부분('@' 이전 문자열)
+    const resolvedUsername = getEmailUsername(
       resolvedEmail,
-      firebaseUser.displayName ||
-        (typeof existingData?.displayName === "string"
-          ? existingData.displayName
-          : null)
+      typeof existingData?.username === "string" ? existingData.username : null
     );
 
-    const resolvedUsername = getUserName(
-      firebaseUser.displayName ||
-        (typeof existingData?.username === "string"
-          ? existingData.username
-          : null),
-      resolvedDisplayName,
-      resolvedEmail
-    );
+    const googleDisplayName =
+      extractGoogleAuthName(firebaseUser) ||
+      (typeof existingData?.googleDisplayName === "string" &&
+      existingData.googleDisplayName.trim()
+        ? existingData.googleDisplayName.trim()
+        : resolvedUsername);
+
+    const existingDisplayName =
+      typeof existingData?.displayName === "string"
+        ? existingData.displayName.trim()
+        : "";
+    const hasCustomUpdate = Boolean(existingData?.updatedAt);
+
+    // 이전 버전에서 displayName에 이메일 앞부분이 자동 저장된 레거시 문서인 경우 Google 이름으로 보정
+    const isLegacyEmailPrefixDisplayName =
+      !hasCustomUpdate &&
+      existingDisplayName === resolvedUsername &&
+      Boolean(googleDisplayName) &&
+      googleDisplayName !== resolvedUsername;
+
+    const resolvedDisplayName = isLegacyEmailPrefixDisplayName
+      ? googleDisplayName
+      : getDisplayName(existingDisplayName, googleDisplayName, resolvedEmail);
 
     const mergedProfile: UserProfile = {
       uid: firebaseUser.uid,
       username: resolvedUsername,
       displayName: resolvedDisplayName,
+      googleDisplayName,
       email: resolvedEmail,
       photoURL:
-        firebaseUser.photoURL ||
         (typeof existingData?.photoURL === "string" &&
         existingData.photoURL.trim()
           ? existingData.photoURL.trim()
-          : baseProfile.photoURL),
+          : firebaseUser.photoURL) || baseProfile.photoURL,
       badge:
         typeof existingData?.badge === "string" && existingData.badge.trim()
           ? existingData.badge.trim()
@@ -203,6 +252,9 @@ export async function syncUserProfileToFirestore(
           ? existingData.bio.trim()
           : baseProfile.bio,
       lastLoginAt: baseProfile.lastLoginAt,
+      ...(typeof existingData?.updatedAt === "string"
+        ? { updatedAt: existingData.updatedAt }
+        : {}),
     };
 
     await setDoc(
@@ -211,6 +263,8 @@ export async function syncUserProfileToFirestore(
         uid: mergedProfile.uid,
         username: mergedProfile.username,
         displayName: mergedProfile.displayName,
+        displayNameLower: mergedProfile.displayName.toLowerCase(),
+        googleDisplayName: mergedProfile.googleDisplayName,
         email: mergedProfile.email,
         photoURL: mergedProfile.photoURL,
         badge: mergedProfile.badge,
@@ -222,7 +276,10 @@ export async function syncUserProfileToFirestore(
 
     return mergedProfile;
   } catch (error) {
-    console.warn("Firestore 유저 프로필 문서 동기화 경고 (기본 인증 정보 사용):", error);
+    console.warn(
+      "Firestore 유저 프로필 문서 동기화 경고 (기본 인증 정보 사용):",
+      error
+    );
     return baseProfile;
   }
 }
@@ -244,15 +301,22 @@ export async function fetchUserProfileFromFirestore(
       typeof data.email === "string" && data.email.trim()
         ? data.email.trim()
         : fallbackUser?.email || "";
-    const resolvedDisplayName = getEmailDisplayName(
+    const resolvedUsername = getEmailUsername(
       resolvedEmail,
+      typeof data.username === "string"
+        ? data.username
+        : fallbackUser?.username
+    );
+    const googleDisplayName =
+      typeof data.googleDisplayName === "string" &&
+      data.googleDisplayName.trim()
+        ? data.googleDisplayName.trim()
+        : fallbackUser?.googleDisplayName || resolvedUsername;
+    const resolvedDisplayName = getDisplayName(
       typeof data.displayName === "string"
         ? data.displayName
-        : fallbackUser?.displayName
-    );
-    const resolvedUsername = getUserName(
-      typeof data.username === "string" ? data.username : fallbackUser?.username,
-      resolvedDisplayName,
+        : fallbackUser?.displayName,
+      googleDisplayName,
       resolvedEmail
     );
 
@@ -260,11 +324,14 @@ export async function fetchUserProfileFromFirestore(
       uid,
       username: resolvedUsername,
       displayName: resolvedDisplayName,
+      googleDisplayName,
       email: resolvedEmail,
       photoURL:
         typeof data.photoURL === "string" && data.photoURL.trim()
           ? data.photoURL.trim()
-          : fallbackUser?.photoURL || DEFAULT_PROFILE_DATA.avatarUrl || "/avatar.png",
+          : fallbackUser?.photoURL ||
+            DEFAULT_PROFILE_DATA.avatarUrl ||
+            "/avatar.png",
       badge:
         typeof data.badge === "string" && data.badge.trim()
           ? data.badge.trim()
@@ -277,11 +344,160 @@ export async function fetchUserProfileFromFirestore(
         typeof data.lastLoginAt === "string"
           ? data.lastLoginAt
           : fallbackUser?.lastLoginAt,
+      updatedAt:
+        typeof data.updatedAt === "string"
+          ? data.updatedAt
+          : fallbackUser?.updatedAt,
     };
   } catch (error) {
     console.warn("Firestore 유저 프로필 조회 실패:", error);
     return fallbackUser ?? null;
   }
+}
+
+/**
+ * Firestore의 users 컬렉션에서 다른 사용자가 동일한 displayName을 사용 중인지 중복 여부를 확인합니다.
+ * @param displayName 확인할 표시 이름
+ * @param excludeUid 중복 검사에서 제외할 현재 로그인 사용자의 UID
+ * @returns 중복이면 true, 사용 가능하면 false
+ */
+export async function checkDisplayNameDuplicate(
+  displayName: string,
+  excludeUid?: string
+): Promise<boolean> {
+  const trimmed = displayName.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const normalizedTarget = trimmed.toLowerCase();
+  const currentUid = excludeUid?.trim() || auth.currentUser?.uid;
+
+  const usersCol = collection(db, USERS_COLLECTION);
+  const snapshot = await getDocs(usersCol);
+
+  for (const docSnap of snapshot.docs) {
+    if (currentUid && docSnap.id === currentUid) {
+      continue;
+    }
+
+    const data = docSnap.data();
+    const docDisplayNameLower =
+      typeof data.displayNameLower === "string"
+        ? data.displayNameLower.trim().toLowerCase()
+        : "";
+    const docDisplayName =
+      typeof data.displayName === "string"
+        ? data.displayName.trim().toLowerCase()
+        : "";
+
+    if (
+      docDisplayNameLower === normalizedTarget ||
+      docDisplayName === normalizedTarget
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export interface UpdateUserProfileInput {
+  displayName: string;
+  badge: string;
+  bio: string;
+  photoURL?: string;
+}
+
+/**
+ * 사용자의 프로필 정보(displayName, badge, bio, photoURL)를 Firestore(users/{uid})에 수정 저장합니다.
+ * username은 이메일 앞부분으로 유지되며, displayName 중복 여부를 저장 전 검증합니다.
+ */
+export async function updateUserProfileInFirestore(
+  input: UpdateUserProfileInput,
+  uid?: string
+): Promise<UserProfile> {
+  const targetUid = resolveTargetUid(uid);
+  const trimmedDisplayName = input.displayName.trim();
+  const trimmedBadge = input.badge.trim() || DEFAULT_PROFILE_DATA.badge;
+  const trimmedBio = input.bio.trim() || DEFAULT_PROFILE_DATA.bio;
+  const trimmedPhotoURL = input.photoURL?.trim();
+
+  // 저장 전 displayName 중복 여부 재검증
+  const isDuplicate = await checkDisplayNameDuplicate(
+    trimmedDisplayName,
+    targetUid
+  );
+  if (isDuplicate) {
+    throw new Error(
+      "이미 다른 사용자가 사용 중인 표시 이름(Display Name)입니다. 다른 이름을 입력해주세요."
+    );
+  }
+
+  const userDocRef = getUserDoc(targetUid);
+  const existingSnap = await getDoc(userDocRef);
+  const existingData = existingSnap.exists() ? existingSnap.data() : null;
+
+  const currentUser = auth.currentUser;
+  const resolvedEmail =
+    currentUser?.email ||
+    (typeof existingData?.email === "string" ? existingData.email : "");
+  const resolvedUsername = getEmailUsername(
+    resolvedEmail,
+    typeof existingData?.username === "string" ? existingData.username : null
+  );
+  const googleDisplayName =
+    extractGoogleAuthName(currentUser) ||
+    (typeof existingData?.googleDisplayName === "string" &&
+    existingData.googleDisplayName.trim()
+      ? existingData.googleDisplayName.trim()
+      : resolvedUsername);
+
+  const resolvedPhotoURL =
+    trimmedPhotoURL ||
+    (typeof existingData?.photoURL === "string" && existingData.photoURL.trim()
+      ? existingData.photoURL.trim()
+      : currentUser?.photoURL) ||
+    DEFAULT_PROFILE_DATA.avatarUrl ||
+    "/avatar.png";
+
+  const nowIso = new Date().toISOString();
+
+  const updatedProfile: UserProfile = {
+    uid: targetUid,
+    username: resolvedUsername,
+    displayName: trimmedDisplayName,
+    googleDisplayName,
+    email: resolvedEmail,
+    photoURL: resolvedPhotoURL,
+    badge: trimmedBadge,
+    bio: trimmedBio,
+    lastLoginAt:
+      typeof existingData?.lastLoginAt === "string"
+        ? existingData.lastLoginAt
+        : nowIso,
+    updatedAt: nowIso,
+  };
+
+  await setDoc(
+    userDocRef,
+    {
+      uid: updatedProfile.uid,
+      username: updatedProfile.username,
+      displayName: updatedProfile.displayName,
+      displayNameLower: updatedProfile.displayName.toLowerCase(),
+      googleDisplayName: updatedProfile.googleDisplayName,
+      email: updatedProfile.email,
+      photoURL: updatedProfile.photoURL,
+      badge: updatedProfile.badge,
+      bio: updatedProfile.bio,
+      lastLoginAt: updatedProfile.lastLoginAt,
+      updatedAt: updatedProfile.updatedAt,
+    },
+    { merge: true }
+  );
+
+  return updatedProfile;
 }
 
 /**

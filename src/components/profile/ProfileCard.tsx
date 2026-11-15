@@ -7,8 +7,8 @@ import { useMounted } from "@/hooks/useMounted";
 import { DEFAULT_PROFILE_DATA, DUMMY_LINKS, INITIAL_LINKS } from "@/data";
 import {
   fetchUserLinks,
-  getEmailDisplayName,
-  getUserName,
+  getDisplayName,
+  getEmailUsername,
   mergeFirestoreLinks,
 } from "@/lib/links";
 import {
@@ -27,6 +27,7 @@ import {
 import { LinkList } from "./LinkList";
 import { SocialBar } from "./SocialBar";
 import { AddLinkDialog } from "./AddLinkDialog";
+import { EditProfileDialog } from "./EditProfileDialog";
 import { LoginRequiredCard } from "./LoginRequiredCard";
 import {
   Sparkles,
@@ -199,13 +200,12 @@ export function ProfileCard() {
   }
 
   // 3. 로그인 완료 상태일 때: 해당 유저 정보 및 개인화 링크 표시
-  const displayName = getEmailDisplayName(
-    user.email,
-    user.displayName || profile.name
-  );
-  const username = getUserName(
-    user.username,
-    displayName || profile.name,
+  // username: 이메일 앞부분('@' 이전 문자열)
+  // displayName: Google 이름 기본값 (수정 가능)
+  const username = getEmailUsername(user.email, user.username);
+  const displayName = getDisplayName(
+    user.displayName,
+    user.googleDisplayName || profile.name,
     user.email
   );
   const displayAvatar = user.photoURL || profile.avatarUrl || "/avatar.png";
@@ -254,26 +254,32 @@ export function ProfileCard() {
           >
             <AvatarImage
               src={displayAvatar}
-              alt={`${username} 프로필 사진`}
+              alt={`${displayName} 프로필 사진`}
             />
             <AvatarFallback>
-              {username.charAt(0).toUpperCase() || "👨‍💻"}
+              {displayName.charAt(0).toUpperCase() || "👨‍💻"}
             </AvatarFallback>
           </Avatar>
         </div>
 
-        {/* 로그인한 유저의 username (기존 displayName 자리) */}
+        {/* 로그인한 유저의 displayName (Google 이름 기본값 / 수정 가능) */}
         <CardTitle
           render={<h1 />}
           className="text-2xl sm:text-3xl font-black tracking-tight text-black"
         >
-          {username}
+          {displayName}
         </CardTitle>
 
-        {/* 그 아래 @displayName (이메일 앞부분) */}
-        <p className="mt-1 text-xs sm:text-sm font-black text-black/65">
-          @{displayName}
-        </p>
+        {/* 그 아래 @username (이메일 앞부분) + 프로필 수정 버튼 */}
+        <div className="mt-1.5 flex items-center justify-center gap-2 flex-wrap">
+          <p className="text-xs sm:text-sm font-black text-black/70">
+            @{username}
+          </p>
+          <EditProfileDialog
+            triggerLabel="프로필 수정"
+            triggerClassName="h-7 px-2.5 text-[11px] sm:text-xs font-black bg-white hover:bg-[#BAE6FD]"
+          />
+        </div>
 
         {/* 유저 이메일 및 직무 / 역할 뱃지 */}
         <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">

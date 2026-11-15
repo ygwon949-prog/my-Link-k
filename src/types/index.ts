@@ -30,13 +30,15 @@ export interface ProfileData {
 
 export interface UserProfile {
   uid: string;
-  username: string;
-  displayName: string;
+  username: string; // 이메일 앞부분 ('@' 이전 문자열)
+  displayName: string; // 표시 이름 (Google 이름 기본값, 수정 가능)
+  googleDisplayName?: string; // Google 계정 원본 이름 (기본값 복원용)
   email: string;
   photoURL: string;
   badge?: string;
   bio?: string;
   lastLoginAt?: string;
+  updatedAt?: string;
 }
 
 

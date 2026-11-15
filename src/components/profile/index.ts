@@ -5,5 +5,7 @@ export * from "./ProfileCard";
 export * from "./AddLinkDialog";
 export * from "./DeleteLinkDialog";
 export * from "./LoginRequiredCard";
+export * from "./EditProfileDialog";
+
 
 
