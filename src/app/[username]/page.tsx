@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { UserProfileCard } from "@/components/profile";
-import { normalizeUsernameParam } from "@/lib/links";
+import { fetchUserByUsername, normalizeUsernameParam } from "@/lib/links";
 
 interface UserPageProps {
   params: Promise<{ username: string }>;
@@ -15,13 +15,78 @@ export async function generateMetadata({
 
   if (!normalized) {
     return {
-      title: "사용자를 찾을 수 없습니다 - mylink",
+      title: "사용자를 찾을 수 없습니다",
+      description: "존재하지 않거나 올바르지 않은 사용자 프로필 페이지입니다.",
+      robots: {
+        index: false,
+        follow: false,
+      },
     };
   }
 
+  // Firestore에서 유저 프로필 비동기 조회
+  let displayName = normalized;
+  let bio = `@${normalized}님의 마이링크(MyLink) 프로필 및 링크 모음 페이지입니다.`;
+  let userExists = false;
+
+  try {
+    const userProfile = await fetchUserByUsername(normalized);
+    if (userProfile) {
+      userExists = true;
+      displayName = userProfile.displayName || normalized;
+      bio =
+        userProfile.bio?.trim() ||
+        `@${normalized}님의 마이링크(MyLink) 프로필 및 링크 모음 페이지입니다.`;
+    }
+  } catch {
+    // Firestore 조회 실패 시 기본값 사용
+    displayName = normalized;
+  }
+
+  const pageTitle = `${displayName} (@${normalized})`;
+  const canonicalUrl = `/${encodeURIComponent(normalized)}`;
+
   return {
-    title: `@${normalized} - mylink 프로필`,
-    description: `@${normalized}님의 마이링크(MyLink) 프로필 및 링크 모음 페이지입니다.`,
+    title: pageTitle,
+    description: bio,
+    keywords: [
+      normalized,
+      displayName,
+      "마이링크",
+      "mylink",
+      "프로필링크",
+      "링크인바이오",
+    ].filter(Boolean),
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      title: pageTitle,
+      description: bio,
+      url: canonicalUrl,
+      siteName: "mylink",
+      locale: "ko_KR",
+      type: "profile",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: pageTitle,
+      description: bio,
+    },
+    robots: userExists
+      ? {
+          index: true,
+          follow: true,
+          googleBot: {
+            index: true,
+            follow: true,
+            "max-image-preview": "large",
+          },
+        }
+      : {
+          index: false,
+          follow: false,
+        },
   };
 }
 
@@ -33,8 +98,27 @@ export default async function UserProfilePage({ params }: UserPageProps) {
     notFound();
   }
 
+  // JSON-LD 구조화 데이터 (ProfilePage)
+  const profileJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "ProfilePage",
+    name: `@${normalizedUsername} 프로필`,
+    url: `https://mylink.kr/${encodeURIComponent(normalizedUsername)}`,
+    mainEntity: {
+      "@type": "Person",
+      name: normalizedUsername,
+      alternateName: `@${normalizedUsername}`,
+      url: `https://mylink.kr/${encodeURIComponent(normalizedUsername)}`,
+    },
+  };
+
   return (
     <main className="relative flex-1 flex flex-col items-center justify-center p-4 sm:p-8 bg-[#FFFBEB] dark:bg-zinc-950 min-h-[calc(100vh-64px)] overflow-hidden">
+      {/* 구조화 데이터 (JSON-LD) */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(profileJsonLd) }}
+      />
       {/* 배경 도트 패턴 (레트로 Neobrutalism 무드) */}
       <div className="absolute inset-0 bg-[radial-gradient(#000000_1.5px,transparent_1.5px)] dark:bg-[radial-gradient(#ffffff_1.5px,transparent_1.5px)] [background-size:24px_24px] opacity-10 pointer-events-none" />
 
