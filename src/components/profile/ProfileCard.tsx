@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { LinkItem } from "@/types";
 import { useProfileStore, useAuthStore } from "@/store";
 import { useMounted } from "@/hooks/useMounted";
+import {
+  useUserLinksQuery,
+  useUserProfileQuery,
+} from "@/hooks/useLinksQuery";
 import { DEFAULT_PROFILE_DATA, DUMMY_LINKS, INITIAL_LINKS } from "@/data";
 import {
-  fetchUserLinks,
   getDisplayName,
   getEmailUsername,
   mergeFirestoreLinks,
@@ -50,52 +53,28 @@ export function ProfileCard() {
   // SSR hydration mismatch 방지: 마운트 전에는 DEFAULT_PROFILE_DATA 사용
   const profile = isMounted ? profileState : DEFAULT_PROFILE_DATA;
 
-  // Firestore(users/{user.uid}/links)에서 불러온 링크 상태, 로딩/갱신 상태 및 샘플 모드 관리
-  const [firestoreLinks, setFirestoreLinks] = useState<LinkItem[]>([]);
+  // TanStack Query 기반 프로필 & 링크 목록 단발성 조회 (실시간 구독 없음)
+  const currentUid = user?.uid;
+  const { data: queriedUserProfile } = useUserProfileQuery(currentUid, user);
+  const effectiveUser = queriedUserProfile || user;
+
+  const {
+    data: firestoreLinks = [],
+    isLoading: isQueryLoading,
+    isRefetching: isRefreshing,
+  } = useUserLinksQuery(currentUid);
+
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
-  const [loadedUid, setLoadedUid] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [refreshMessage, setRefreshMessage] = useState<string>(
     "링크 변경 사항을 반영하여 목록을 갱신하는 중입니다..."
   );
   const [isSampleMode, setIsSampleMode] = useState(false);
 
-  const currentUid = user?.uid;
-  const isLoading = Boolean(currentUid) && loadedUid !== currentUid;
-
-  // 로그인한 사용자(user.uid) 변경 시 Firestore(users/{user.uid}/links)에서 최신순 링크 조회
-  useEffect(() => {
-    if (!currentUid) {
-      return;
-    }
-
-    let isMountedEffect = true;
-
-    fetchUserLinks(currentUid)
-      .then((fetchedLinks) => {
-        if (isMountedEffect) {
-          setFirestoreLinks(fetchedLinks);
-          setDeletedIds([]);
-        }
-      })
-      .catch((error) => {
-        console.error("개인화 링크 목록 조회 실패:", error);
-      })
-      .finally(() => {
-        if (isMountedEffect) {
-          setLoadedUid(currentUid);
-        }
-      });
-
-    return () => {
-      isMountedEffect = false;
-    };
-  }, [currentUid]);
+  const isLoading = Boolean(currentUid) && isQueryLoading;
 
   // Firestore 저장 링크와 기본/샘플 링크를 중복 없이 병합 (createdAt 최신순 정렬)
   const links = useMemo(() => {
-    const scopedFirestoreLinks =
-      currentUid && loadedUid === currentUid ? firestoreLinks : [];
+    const scopedFirestoreLinks = currentUid ? firestoreLinks : [];
     const baseLinks = (isSampleMode ? DUMMY_LINKS : INITIAL_LINKS).filter(
       (item) => !deletedIds.includes(item.id)
     );
@@ -103,62 +82,27 @@ export function ProfileCard() {
       (item) => !deletedIds.includes(item.id)
     );
     return mergeFirestoreLinks(activeFirestoreLinks, baseLinks);
-  }, [currentUid, loadedUid, firestoreLinks, isSampleMode, deletedIds]);
+  }, [currentUid, firestoreLinks, isSampleMode, deletedIds]);
 
-  // Firestore(users/{user.uid}/links)에서 최신 링크 목록을 다시 불러오는 갱신형 헬퍼
-  const refreshLinksFromFirestore = (message: string) => {
-    if (!currentUid) return;
-    setRefreshMessage(message);
-    setIsRefreshing(true);
-    Promise.all([
-      fetchUserLinks(currentUid),
-      new Promise((resolve) => setTimeout(resolve, 250)),
-    ])
-      .then(([fetchedLinks]) => {
-        setFirestoreLinks(fetchedLinks);
-      })
-      .catch((error) => {
-        console.error("Firestore 링크 목록 갱신 실패:", error);
-      })
-      .finally(() => {
-        setIsRefreshing(false);
-      });
-  };
-
-  // 다이얼로그에서 Firestore 저장 후 새 링크 전달 시 상태 업데이트 및 목록 갱신
+  // 다이얼로그에서 TanStack Query Mutation 완료 후 스토어 동기화
   const handleAddLink = (newLink: LinkItem) => {
-    setFirestoreLinks((prev) => mergeFirestoreLinks([newLink], prev));
+    setRefreshMessage("새 링크를 반영하여 목록을 갱신하는 중입니다...");
     addStoreLink(newLink);
-    refreshLinksFromFirestore("새 링크를 반영하여 목록을 갱신하는 중입니다...");
   };
 
-  // 인라인 편집에서 Firestore 수정 완료 시 상태 업데이트 및 목록 갱신
+  // 인라인 편집에서 TanStack Query Mutation 완료 후 스토어 동기화
   const handleUpdateLink = (updatedLink: LinkItem) => {
-    setFirestoreLinks((prev) => {
-      const exists = prev.some((item) => item.id === updatedLink.id);
-      if (exists) {
-        return prev.map((item) =>
-          item.id === updatedLink.id ? updatedLink : item
-        );
-      }
-      return [updatedLink, ...prev];
-    });
+    setRefreshMessage("수정된 링크를 반영하여 목록을 갱신하는 중입니다...");
     updateStoreLink(updatedLink.id, updatedLink);
-    refreshLinksFromFirestore(
-      "수정된 링크를 반영하여 목록을 갱신하는 중입니다..."
-    );
   };
 
-  // 삭제 확인 모달에서 Firestore 삭제 완료 시 상태 업데이트 및 목록 갱신
+  // 삭제 확인 모달에서 TanStack Query Mutation 완료 후 스토어 동기화
   const handleDeleteLink = (deletedId: string) => {
+    setRefreshMessage("삭제된 링크를 반영하여 목록을 갱신하는 중입니다...");
     setDeletedIds((prev) =>
       prev.includes(deletedId) ? prev : [...prev, deletedId]
     );
-    setFirestoreLinks((prev) => prev.filter((item) => item.id !== deletedId));
     removeStoreLink(deletedId);
-    refreshLinksFromFirestore(
-      "삭제된 링크를 반영하여 목록을 갱신하는 중입니다..."
-    );
   };
 
   // 샘플 데이터 전환 (INITIAL 4개 <-> DUMMY 10개 전체 목록)
@@ -195,25 +139,29 @@ export function ProfileCard() {
   }
 
   // 2. 로그인하지 않은 상태일 때: 로그인 이후 사용할 수 있도록 설명 문구 화면 표시
-  if (!user) {
+  if (!user || !effectiveUser) {
     return <LoginRequiredCard pageTitle="마이링크 프로필 카드" />;
   }
 
-  // 3. 로그인 완료 상태일 때: 해당 유저 정보 및 개인화 링크 표시
+  // 3. 로그인 완료 상태일 때: 해당 유저 정보(낙관적 업데이트 즉시 반영) 및 개인화 링크 표시
   // username: 이메일 앞부분('@' 이전 문자열)
   // displayName: Google 이름 기본값 (수정 가능)
-  const username = getEmailUsername(user.email, user.username);
-  const displayName = getDisplayName(
-    user.displayName,
-    user.googleDisplayName || profile.name,
-    user.email
+  const username = getEmailUsername(
+    effectiveUser.email,
+    effectiveUser.username
   );
-  const displayAvatar = user.photoURL || profile.avatarUrl || "/avatar.png";
-  const displayBadge = user.badge || profile.badge;
-  const displayBio = user.bio || profile.bio;
+  const displayName = getDisplayName(
+    effectiveUser.displayName,
+    effectiveUser.googleDisplayName || profile.name,
+    effectiveUser.email
+  );
+  const displayAvatar =
+    effectiveUser.photoURL || profile.avatarUrl || "/avatar.png";
+  const displayBadge = effectiveUser.badge || profile.badge;
+  const displayBio = effectiveUser.bio || profile.bio;
   const socials = {
     ...profile.socials,
-    ...(user.email ? { email: user.email } : {}),
+    ...(effectiveUser.email ? { email: effectiveUser.email } : {}),
   };
 
   return (

@@ -14,12 +14,11 @@ import {
   BIO_MAX_LENGTH,
   normalizeUrl,
 } from "@/schemas";
+import { getDisplayName, getEmailUsername } from "@/lib/links";
 import {
-  checkDisplayNameDuplicate,
-  getDisplayName,
-  getEmailUsername,
-  updateUserProfileInFirestore,
-} from "@/lib/links";
+  useCheckDisplayNameDuplicateMutation,
+  useUpdateProfileMutation,
+} from "@/hooks/useLinksQuery";
 import { useAuthStore, useProfileStore } from "@/store";
 import {
   Dialog,
@@ -89,11 +88,12 @@ export function EditProfileDialog({
   const open = isControlled ? controlledOpen : internalOpen;
 
   const user = useAuthStore((state) => state.user);
-  const updateUserProfileStore = useAuthStore(
-    (state) => state.updateUserProfile
-  );
   const profileState = useProfileStore((state) => state.profile);
-  const updateProfileStore = useProfileStore((state) => state.updateProfile);
+
+  const checkDuplicateMutation = useCheckDisplayNameDuplicateMutation(
+    user?.uid
+  );
+  const updateProfileMutation = useUpdateProfileMutation(user?.uid);
 
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [duplicateStatus, setDuplicateStatus] =
@@ -235,10 +235,7 @@ export function EditProfileDialog({
     setDuplicateMessage(null);
 
     try {
-      const isDuplicate = await checkDisplayNameDuplicate(
-        targetName,
-        user?.uid
-      );
+      const isDuplicate = await checkDuplicateMutation.mutateAsync(targetName);
       setCheckedDisplayName(targetName);
 
       if (isDuplicate) {
@@ -327,23 +324,13 @@ export function EditProfileDialog({
           : normalizeUrl(data.photoURL.trim())
         : user?.photoURL || DEFAULT_PROFILE_DATA.avatarUrl;
 
-      const updatedUserProfile = await updateUserProfileInFirestore(
-        {
-          displayName: nextName,
-          badge: data.badge.trim(),
-          bio: data.bio.trim(),
-          photoURL: normalizedPhoto,
-        },
-        user?.uid
-      );
-
-      // 전역 인증 스토어 및 로컬 프로필 스토어 즉시 동기화
-      updateUserProfileStore(updatedUserProfile);
-      updateProfileStore({
-        name: updatedUserProfile.displayName,
-        badge: updatedUserProfile.badge || DEFAULT_PROFILE_DATA.badge,
-        bio: updatedUserProfile.bio || DEFAULT_PROFILE_DATA.bio,
-        avatarUrl: updatedUserProfile.photoURL,
+      // useUpdateProfileMutation의 onMutate에서 낙관적 업데이트(쿼리 캐시 및 스토어 즉시 반영)가 수행되며,
+      // 에러 발생 시 onError에서 이전 상태로 자동 롤백됩니다.
+      const updatedUserProfile = await updateProfileMutation.mutateAsync({
+        displayName: nextName,
+        badge: data.badge.trim(),
+        bio: data.bio.trim(),
+        photoURL: normalizedPhoto,
       });
 
       onProfileUpdated?.(updatedUserProfile);

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { LinkItem } from "@/types";
-import { deleteLinkFromFirestore } from "@/lib/links";
+import { useDeleteLinkMutation } from "@/hooks/useLinksQuery";
 import { useAuthStore } from "@/store";
 import {
   Dialog,
@@ -37,6 +37,7 @@ export function DeleteLinkDialog({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const authUser = useAuthStore((state) => state.user);
   const effectiveUid = userId || authUser?.uid;
+  const deleteLinkMutation = useDeleteLinkMutation(effectiveUid);
 
   const updateDeletingState = (nextState: boolean) => {
     setIsDeleting(nextState);
@@ -55,10 +56,7 @@ export function DeleteLinkDialog({
     setDeleteError(null);
     updateDeletingState(true);
     try {
-      await Promise.all([
-        deleteLinkFromFirestore(link.id, effectiveUid),
-        new Promise((resolve) => setTimeout(resolve, 350)),
-      ]);
+      await deleteLinkMutation.mutateAsync(link.id);
       onDeleteLink?.(link.id);
       onOpenChange(false);
     } catch (error) {

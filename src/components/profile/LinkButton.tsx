@@ -13,7 +13,7 @@ import {
   TITLE_MAX_LENGTH,
   DESCRIPTION_MAX_LENGTH,
 } from "@/schemas";
-import { updateLinkInFirestore } from "@/lib/links";
+import { useUpdateLinkMutation } from "@/hooks/useLinksQuery";
 import { useAuthStore } from "@/store";
 import {
   Field,
@@ -78,6 +78,7 @@ export function LinkButton({
   const isMail = link.url.startsWith("mailto:");
   const authUser = useAuthStore((state) => state.user);
   const effectiveUid = userId || authUser?.uid;
+  const updateLinkMutation = useUpdateLinkMutation(effectiveUid);
 
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -151,10 +152,10 @@ export function LinkButton({
     setSubmitError(null);
     try {
       const updatedDraft = updateLinkItemFromForm(link, data);
-      const [savedLink] = await Promise.all([
-        updateLinkInFirestore(link.id, updatedDraft, effectiveUid),
-        new Promise((resolve) => setTimeout(resolve, 350)),
-      ]);
+      const savedLink = await updateLinkMutation.mutateAsync({
+        linkId: link.id,
+        linkInput: updatedDraft,
+      });
       onUpdateLink?.(savedLink);
       setIsEditing(false);
     } catch (error) {

@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { LinkItem } from "@/types";
 import { useProfileStore, useAuthStore } from "@/store";
 import { useMounted } from "@/hooks/useMounted";
+import { useUserLinksQuery } from "@/hooks/useLinksQuery";
 import { DUMMY_LINKS, LINK_CATEGORIES } from "@/data";
 import {
-  fetchUserLinks,
   getDisplayName,
   getEmailUsername,
   mergeFirestoreLinks,
@@ -46,52 +46,25 @@ export default function LinksPage() {
   const updateStoreLink = useProfileStore((state) => state.updateLink);
   const removeStoreLink = useProfileStore((state) => state.removeLink);
 
-  // Firestore(users/{user.uid}/links) 링크 목록 및 로딩/갱신 상태 관리
-  const [firestoreLinks, setFirestoreLinks] = useState<LinkItem[]>([]);
+  // TanStack Query 기반 링크 목록 단발성 조회 (실시간 구독 없음)
+  const currentUid = user?.uid;
+  const {
+    data: firestoreLinks = [],
+    isLoading: isQueryLoading,
+    isRefetching: isRefreshing,
+  } = useUserLinksQuery(currentUid);
+
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
-  const [loadedUid, setLoadedUid] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [refreshMessage, setRefreshMessage] = useState<string>(
     "링크 변경 사항을 반영하여 목록을 갱신하는 중입니다..."
   );
   const [selectedCategory, setSelectedCategory] = useState<string>("전체");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  const currentUid = user?.uid;
-  const isLoading = Boolean(currentUid) && loadedUid !== currentUid;
-
-  // 로그인한 사용자(user.uid) 변경 시 Firestore(users/{user.uid}/links)에서 최신순 링크 조회
-  useEffect(() => {
-    if (!currentUid) {
-      return;
-    }
-
-    let isMountedEffect = true;
-
-    fetchUserLinks(currentUid)
-      .then((fetchedLinks) => {
-        if (isMountedEffect) {
-          setFirestoreLinks(fetchedLinks);
-          setDeletedIds([]);
-        }
-      })
-      .catch((error) => {
-        console.error("개인화 링크 목록 조회 실패:", error);
-      })
-      .finally(() => {
-        if (isMountedEffect) {
-          setLoadedUid(currentUid);
-        }
-      });
-
-    return () => {
-      isMountedEffect = false;
-    };
-  }, [currentUid]);
+  const isLoading = Boolean(currentUid) && isQueryLoading;
 
   const links = useMemo(() => {
-    const scopedFirestoreLinks =
-      currentUid && loadedUid === currentUid ? firestoreLinks : [];
+    const scopedFirestoreLinks = currentUid ? firestoreLinks : [];
     const baseLinks = DUMMY_LINKS.filter(
       (item) => !deletedIds.includes(item.id)
     );
@@ -99,58 +72,24 @@ export default function LinksPage() {
       (item) => !deletedIds.includes(item.id)
     );
     return mergeFirestoreLinks(activeFirestoreLinks, baseLinks);
-  }, [currentUid, loadedUid, firestoreLinks, deletedIds]);
-
-  const refreshLinksFromFirestore = (message: string) => {
-    if (!currentUid) return;
-    setRefreshMessage(message);
-    setIsRefreshing(true);
-    Promise.all([
-      fetchUserLinks(currentUid),
-      new Promise((resolve) => setTimeout(resolve, 250)),
-    ])
-      .then(([fetchedLinks]) => {
-        setFirestoreLinks(fetchedLinks);
-      })
-      .catch((error) => {
-        console.error("Firestore 링크 목록 갱신 실패:", error);
-      })
-      .finally(() => {
-        setIsRefreshing(false);
-      });
-  };
+  }, [currentUid, firestoreLinks, deletedIds]);
 
   const handleAddLink = (newLink: LinkItem) => {
-    setFirestoreLinks((prev) => mergeFirestoreLinks([newLink], prev));
+    setRefreshMessage("새 링크를 반영하여 목록을 갱신하는 중입니다...");
     addStoreLink(newLink);
-    refreshLinksFromFirestore("새 링크를 반영하여 목록을 갱신하는 중입니다...");
   };
 
   const handleUpdateLink = (updatedLink: LinkItem) => {
-    setFirestoreLinks((prev) => {
-      const exists = prev.some((item) => item.id === updatedLink.id);
-      if (exists) {
-        return prev.map((item) =>
-          item.id === updatedLink.id ? updatedLink : item
-        );
-      }
-      return [updatedLink, ...prev];
-    });
+    setRefreshMessage("수정된 링크를 반영하여 목록을 갱신하는 중입니다...");
     updateStoreLink(updatedLink.id, updatedLink);
-    refreshLinksFromFirestore(
-      "수정된 링크를 반영하여 목록을 갱신하는 중입니다..."
-    );
   };
 
   const handleDeleteLink = (deletedId: string) => {
+    setRefreshMessage("삭제된 링크를 반영하여 목록을 갱신하는 중입니다...");
     setDeletedIds((prev) =>
       prev.includes(deletedId) ? prev : [...prev, deletedId]
     );
-    setFirestoreLinks((prev) => prev.filter((item) => item.id !== deletedId));
     removeStoreLink(deletedId);
-    refreshLinksFromFirestore(
-      "삭제된 링크를 반영하여 목록을 갱신하는 중입니다..."
-    );
   };
 
   // 필터링 적용

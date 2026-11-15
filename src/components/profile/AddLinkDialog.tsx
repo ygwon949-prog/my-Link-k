@@ -31,7 +31,7 @@ import {
   Badge,
 } from "@/components/ui";
 import { LinkButton } from "./LinkButton";
-import { addLinkToFirestore } from "@/lib/links";
+import { useAddLinkMutation } from "@/hooks/useLinksQuery";
 import { useAuthStore } from "@/store";
 import {
   Plus,
@@ -85,6 +85,7 @@ export function AddLinkDialog({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const authUser = useAuthStore((state) => state.user);
   const effectiveUid = userId || authUser?.uid;
+  const addLinkMutation = useAddLinkMutation(effectiveUid);
 
   // 기존 링크 목록을 반영한 동적 Zod 스키마 메모이제이션
   const schema = useMemo(
@@ -131,7 +132,7 @@ export function AddLinkDialog({
     setSubmitError(null);
     try {
       const draftLink = createLinkItemFromForm(data);
-      const savedLink = await addLinkToFirestore(draftLink, effectiveUid);
+      const savedLink = await addLinkMutation.mutateAsync(draftLink);
       onAddLink?.(savedLink);
       reset(DEFAULT_VALUES);
       setOpen(false);
